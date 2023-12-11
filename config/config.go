@@ -398,6 +398,8 @@ func (h HTSGETStorage) Valid() bool {
 
 // Kubernetes describes the configuration for the Kubernetes compute backend.
 type Kubernetes struct {
+	// The executor used to execute tasks. Available executors: docker, kubernetes
+	Executor string
 	// Turn off task state reconciler. When enabled, Funnel communicates with Kuberenetes
 	// to find tasks that are stuck in a queued state or errored and updates the task state
 	// accordingly.
@@ -411,6 +413,10 @@ type Kubernetes struct {
 	Template string
 	// TemplateFile is the path to the job template.
 	TemplateFile string
+	// Job template used for executing the tasks.
+	ExecutorTemplate string
+	// ExecutorTemplateFile is the path to the executor template.
+	ExecutorTemplateFile string
 	// Path to the Kubernetes configuration file, otherwise assumes the Funnel server is running in a pod and
 	// attempts to use https://godoc.org/k8s.io/client-go/rest#InClusterConfig to infer configuration.
 	ConfigFile string
