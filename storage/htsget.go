@@ -1,9 +1,9 @@
 package storage
 
 import (
-	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -128,36 +128,24 @@ func htsgetUrl(url, useProtocol string) (updatedUrl string, token string) {
 	return
 }
 
-func htsgetHeader() string {
+func htsgetHeaderJson() string {
 	ensureKeyFiles()
 
-	file, err := os.Open(publicKeyFile)
+	b, err := os.ReadFile(publicKeyFile)
 	if err != nil {
-		fmt.Println("Could not read", publicKeyFile, "file, which should exist:", err)
+		fmt.Println("[ERROR] Could not read", publicKeyFile,
+			"file, which should exist:", err)
 		panic(1)
 	}
 
-	publicKey := ""
-	scanner := bufio.NewScanner(file)
-	if scanner.Scan() { // Skip one header line.
-		if scanner.Scan() {
-			publicKey = scanner.Text() // The key is on the second line.
-		}
-	}
-	file.Close()
-
 	// HTTP headers to be encoded as JSON:
 	headers := make(map[string]string)
-
-	if publicKey == "" {
-		fmt.Println("[WARN] Could not read public key (second line) from", publicKeyFile, "file.")
-	} else {
-		headers["client-public-key"] = publicKey
-	}
+	headers["client-public-key"] = base64.StdEncoding.EncodeToString(b)
 
 	headersJson, err := json.Marshal(&headers)
 	if err != nil {
-		fmt.Println("Failed to format JSON-header for passing client-public-key:", err)
+		fmt.Println("[ERROR] Failed to format JSON-header for passing",
+			"client-public-key:", err)
 		panic(1)
 	}
 
@@ -173,7 +161,7 @@ func htsgetArgs(url, useProtocol string, decrypt bool) []string {
 	}
 
 	if decrypt {
-		cmdArgs = append(cmdArgs, "--headers", htsgetHeader())
+		cmdArgs = append(cmdArgs, "--headers", htsgetHeaderJson())
 	}
 
 	cmdArgs = append(cmdArgs, httpsUrl)
@@ -260,11 +248,6 @@ func cmdPipe(cmd1, cmd2 *exec.Cmd, destFilePath string) {
 	stderr1 := new(bytes.Buffer)
 	stderr2 := new(bytes.Buffer)
 	r, w := io.Pipe()
-
-	if err != nil {
-		fmt.Printf("[ERROR] failed to create OS pipe: %v", err)
-		return
-	}
 
 	cmd1.Stdout = w
 	cmd1.Stderr = stderr1
