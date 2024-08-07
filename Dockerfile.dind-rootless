@@ -11,7 +11,7 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build make build
 
 # final stage
-FROM docker:stable-dind-rootless
+FROM docker:dind-rootless
 WORKDIR /opt/funnel
 VOLUME /opt/funnel/funnel-work-dir
 EXPOSE 8000 9090

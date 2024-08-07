@@ -14,7 +14,7 @@ import (
 type DockerCommand struct {
 	ContainerName   string
 	RemoveContainer bool
-	Command 	
+	Command
 }
 
 // Run runs the Docker command and blocks until done.
@@ -31,7 +31,7 @@ func (dcmd DockerCommand) Run(ctx context.Context) error {
 		dcmd.Event.Error("failed to pull docker image", err)
 	}
 
-	args := []string{"run", "-i", "--read-only"}
+	args := []string{"docker", "run", "-i", "--read-only"}
 
 	if dcmd.RemoveContainer {
 		args = append(args, "--rm")
@@ -60,8 +60,11 @@ func (dcmd DockerCommand) Run(ctx context.Context) error {
 	args = append(args, dcmd.ShellCommand...)
 
 	// Roughly: `docker run --rm -i --read-only -w [workdir] -v [bindings] [imageName] [cmd]`
-	dcmd.Event.Info("Running command", "cmd", "docker "+strings.Join(args, " "))
-	cmd := exec.Command("docker", args...)
+
+	cmdStr := strings.Join(args, " ")
+
+	dcmd.Event.Info("Running command", "cmd", cmdStr)
+	cmd := exec.Command(args[0], args[1:]...)
 
 	if dcmd.Stdin != nil {
 		cmd.Stdin = dcmd.Stdin
@@ -74,7 +77,12 @@ func (dcmd DockerCommand) Run(ctx context.Context) error {
 	}
 	go dcmd.inspectContainer(ctx)
 	out := cmd.Run()
-	dcmd.Event.Info("Command %s Complete exit=%s", strings.Join(args, " "), out)
+
+	dcmd.Event.Info("Command completed",
+		"cmd", cmdStr,
+		"err", out,
+		"exit", cmd.ProcessState.ExitCode())
+
 	return out
 }
 

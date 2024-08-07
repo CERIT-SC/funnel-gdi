@@ -396,4 +396,4 @@ FTPStorage:
 HTSGETStorage:
   Disabled: false
   Protocol: https
-  SendPublicKey: false
+  Timeout: 30s

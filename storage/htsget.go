@@ -1,74 +1,68 @@
 package storage
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/storage/htsget"
 )
 
 const (
-	protocol       = "htsget://"
-	protocolBearer = protocol + "bearer:"
-	privateKeyFile = ".private.key"
-	publicKeyFile  = ".public.key"
+	protocolPrefix = "htsget://"
+	protocolBearer = protocolPrefix + "bearer:"
 )
 
-// HTSGET provides read access to public URLs.
-//
-// Note that it relies on following programs to be installed and available in
-// the system PATH:
-//
-//   - "htsget" (client implementation of the protocol)
-//   - "crypt4gh" (to support "*.c4gh" encrypted resources)
-//   - "crypt4gh-keygen" (to generate private and public keys)
-//
-// For more info about the programs:
-//   - https://htsget.readthedocs.io/en/latest/
-//   - https://crypt4gh.readthedocs.io/en/latest/
+// HTSGET provides read-access to public URLs.
+// It is a client implementation based on the specification
+// http://samtools.github.io/hts-specs/htsget.html
+// HTSGET URLs need to provided in Funnel tasks as
+// `htsget://[bearer:token@]host/path/to/api/{reads|variants}/resource-id`
+// Where a Bearer token can be optionally specified to forward JWT credentials.
 type HTSGET struct {
 	conf config.HTSGETStorage
 }
 
-// NewHTSGET creates a new HTSGET instance.
+// NewHTSGET creates a new HTSGET instance based on the provided configuration.
 func NewHTSGET(conf config.HTSGETStorage) (*HTSGET, error) {
 	return &HTSGET{conf: conf}, nil
 }
 
-// Join a directory URL with a subpath.
+// Join a directory URL with a subpath. Not supported with HTSGET.
 func (b *HTSGET) Join(url, path string) (string, error) {
-	return "", nil
+	return "", fmt.Errorf("htsgetStorage: Join operation is not supported")
 }
 
-// Stat returns information about the object at the given storage URL.
+// Stat returns information about the object at the given storage URL. Not supported with HTSGET.
 func (b *HTSGET) Stat(ctx context.Context, url string) (*Object, error) {
-	return nil, nil
+	return nil, fmt.Errorf("htsgetStorage: Stat operation is not supported")
 }
 
-// List a directory. Calling List on a File is an error.
+// List a directory. Calling List on a File is an error. Not supported with HTSGET.
 func (b *HTSGET) List(ctx context.Context, url string) ([]*Object, error) {
-	return nil, nil
+	return nil, fmt.Errorf("htsgetStorage: List operation is not supported")
 }
 
+// Not supported with HTSGET.
 func (b *HTSGET) Put(ctx context.Context, url, path string) (*Object, error) {
-	return nil, nil
+	return nil, fmt.Errorf("htsgetStorage: Put operation is not supported")
 }
 
-// Get copies a file from a given URL to the host path.
+// Get operation copies a file from a given URL to the host path.
 //
 // If configuration specifies sending a public key, the received content will
 // be also decrypted locally before writing to the file.
 func (b *HTSGET) Get(ctx context.Context, url, path string) (*Object, error) {
-	htsgetArgs := htsgetArgs(url, b.conf.Protocol, b.conf.SendPublicKey)
-	cmd1, cmd2 := htsgetCmds(htsgetArgs, b.conf.SendPublicKey)
-	cmdPipe(cmd1, cmd2, path)
+	httpsUrl, token := htsgetUrl(url, b.conf.Protocol)
+
+	client := htsget.NewHtsgetClient(httpsUrl, token, time.Duration(b.conf.Timeout))
+	err := client.DownloadTo(path)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check that the destination file exists:
 	info, err := os.Stat(path)
@@ -78,9 +72,9 @@ func (b *HTSGET) Get(ctx context.Context, url, path string) (*Object, error) {
 
 	return &Object{
 		URL:          url,
+		Name:         path,
 		Size:         info.Size(),
 		LastModified: info.ModTime(),
-		Name:         path,
 	}, nil
 }
 
@@ -101,7 +95,7 @@ func (b *HTSGET) UnsupportedOperations(url string) UnsupportedOperations {
 }
 
 func (b *HTSGET) supportsPrefix(url string) error {
-	if !strings.HasPrefix(url, protocol) {
+	if !strings.HasPrefix(url, protocolPrefix) {
 		return &ErrUnsupportedProtocol{"htsgetStorage"}
 	}
 	return nil
@@ -112,7 +106,7 @@ func htsgetUrl(url, useProtocol string) (updatedUrl string, token string) {
 		useProtocol = "https"
 	}
 	useProtocol += "://"
-	updatedUrl = strings.Replace(url, protocol, useProtocol, 1)
+	updatedUrl = strings.Replace(url, protocolPrefix, useProtocol, 1)
 
 	// Optional info: parse the "token" from "htsget://bearer:token@host..."
 	if strings.HasPrefix(url, protocolBearer) {
@@ -125,179 +119,5 @@ func htsgetUrl(url, useProtocol string) (updatedUrl string, token string) {
 		}
 	}
 
-	return
-}
-
-func htsgetHeader() string {
-	ensureKeyFiles()
-
-	file, err := os.Open(publicKeyFile)
-	if err != nil {
-		fmt.Println("Could not read", publicKeyFile, "file, which should exist:", err)
-		panic(1)
-	}
-
-	publicKey := ""
-	scanner := bufio.NewScanner(file)
-	if scanner.Scan() { // Skip one header line.
-		if scanner.Scan() {
-			publicKey = scanner.Text() // The key is on the second line.
-		}
-	}
-	file.Close()
-
-	// HTTP headers to be encoded as JSON:
-	headers := make(map[string]string)
-
-	if publicKey == "" {
-		fmt.Println("[WARN] Could not read public key (second line) from", publicKeyFile, "file.")
-	} else {
-		headers["client-public-key"] = publicKey
-	}
-
-	headersJson, err := json.Marshal(&headers)
-	if err != nil {
-		fmt.Println("Failed to format JSON-header for passing client-public-key:", err)
-		panic(1)
-	}
-
-	return string(headersJson)
-}
-
-func htsgetArgs(url, useProtocol string, decrypt bool) []string {
-	httpsUrl, token := htsgetUrl(url, useProtocol)
-	cmdArgs := make([]string, 0)
-
-	if len(token) > 0 {
-		cmdArgs = append(cmdArgs, "--bearer-token", token)
-	}
-
-	if decrypt {
-		cmdArgs = append(cmdArgs, "--headers", htsgetHeader())
-	}
-
-	cmdArgs = append(cmdArgs, httpsUrl)
-	return cmdArgs
-}
-
-func htsgetCmds(htsgetArgs []string, decrypt bool) (cmd1, cmd2 *exec.Cmd) {
-	cmd1 = exec.Command("htsget", htsgetArgs...)
-
-	if decrypt {
-		cmd2 = exec.Command("crypt4gh", "decrypt", "--sk", privateKeyFile)
-	} else {
-		cmd2 = exec.Command("cat")
-	}
-
-	return
-}
-
-func ensureKeyFiles() {
-	files := []string{publicKeyFile, privateKeyFile}
-	filesExist := true
-
-	for i := range files {
-		if file, err := os.Open(files[i]); err == nil {
-			file.Close()
-		} else {
-			filesExist = false
-			break
-		}
-	}
-
-	if !filesExist {
-		err := runCmd("crypt4gh-keygen", "-f", "--nocrypt",
-			"--sk", privateKeyFile, "--pk", publicKeyFile)
-		if err != nil {
-			fmt.Println("Could not generate crypt4gh key-files:", err)
-			panic(1)
-		} else {
-			fmt.Println("[INFO] Generated crypt4gh key-pair.")
-		}
-	}
-}
-
-func runCmd(commandName string, commandArgs ...string) error {
-	cmd := exec.Command(commandName, commandArgs...)
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if err != nil {
-		err = fmt.Errorf("Error running command %s: %v\nSTDOUT: %s\nSTDERR: %s",
-			commandName, err, stdout.String(), stderr.String())
-	}
-	return err
-}
-
-func cmdFailed(cmd *exec.Cmd, stderr *bytes.Buffer) bool {
-	fmt.Println("Waiting for ", cmd.Path)
-	if err := cmd.Wait(); err != nil {
-		fmt.Printf("[ERROR] `%s` command failed: %v\n", cmd.Path, err)
-		if stderr.Len() > 0 {
-			fmt.Println("Output from STDERR:")
-			fmt.Print(stderr.String())
-		}
-		return true
-	} else {
-		fmt.Println("Waiting done ")
-		return false
-	}
-}
-
-func cmdPipe(cmd1, cmd2 *exec.Cmd, destFilePath string) {
-	fw, err := os.Create(destFilePath)
-	if err != nil {
-		fmt.Println("[ERROR] Failed to create file for saving content:", destFilePath, err)
-		return
-	}
-	defer fw.Close()
-
-	// Output from cmd1 goes to cmd2, and output from cmd2 goes to the file.
-	stderr1 := new(bytes.Buffer)
-	stderr2 := new(bytes.Buffer)
-	r, w := io.Pipe()
-
-	if err != nil {
-		fmt.Printf("[ERROR] failed to create OS pipe: %v", err)
-		return
-	}
-
-	cmd1.Stdout = w
-	cmd1.Stderr = stderr1
-
-	cmd2.Stdin = r
-	cmd2.Stdout = fw
-	cmd2.Stderr = stderr2
-
-	if err := cmd1.Start(); err != nil {
-		fmt.Printf("[ERROR] failed to run `%s` command: %v", cmd1.Path, err)
-		return
-	}
-
-	if err := cmd2.Start(); err != nil {
-		fmt.Printf("[ERROR] failed to run `%s` command: %v", cmd2.Path, err)
-		return
-	}
-
-	fmt.Println("cmd1:", cmd1.String())
-	fmt.Println("cmd2:", cmd2.String())
-	fmt.Println("dest:", destFilePath)
-
-	if cmdFailed(cmd1, stderr1) {
-		fw.Close()
-		os.Remove(destFilePath)
-	}
-
-	w.Close()
-
-	if cmdFailed(cmd2, stderr2) {
-		fw.Close()
-		os.Remove(destFilePath)
-	}
-
-	r.Close()
+	return updatedUrl, token
 }

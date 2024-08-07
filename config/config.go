@@ -390,13 +390,14 @@ func (h FTPStorage) Valid() bool {
 	return !h.Disabled
 }
 
-// HTSGETStorage configures the http storage backend.
+// HTSGETStorage configures the storage backend for the HTSGET protocol.
 type HTSGETStorage struct {
+	// Controls whether HTSGET storage is disabled (defaults to false)
 	Disabled bool
 	// Actual protocol for fetching the resource (defaults to 'https')
 	Protocol string
-	// Whether Funnel should generate and send its crypt4gh public key (default: false)
-	SendPublicKey bool
+	// Timeout for each HTSGET request (defaults to 30 seconds)
+	Timeout Duration
 }
 
 // Valid validates the HTSGETStorage configuration.

@@ -11,8 +11,7 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build make build
 
 # final stage
-FROM debian
-RUN apt-get update && apt-get install -y --no-install-recommends curl python3-pip && pip3 install htsget crypt4gh --break-system-packages && rm -rf ~/.cache
+FROM alpine
 WORKDIR /opt/funnel
 VOLUME /opt/funnel/funnel-work-dir
 EXPOSE 8000 9090
