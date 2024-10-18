@@ -82,39 +82,66 @@ func (kcmd KubernetesCommand) Run(ctx context.Context) error {
 	_, err = client.Create(ctx, job, metav1.CreateOptions{})
 
 	if err != nil {
-		return fmt.Errorf("creating job: %v", err)
+		return fmt.Errorf("error while creating job: %v", err)
 	}
 
-	waitForJobFinish(ctx, client, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s-%d", taskId, kcmd.JobId)})
-
-	pods, err := clientset.CoreV1().Pods(kcmd.Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s-%d", taskId, kcmd.JobId)})
+	err = waitForJobPodStart(ctx, kcmd.Namespace, fmt.Sprintf("%s-%d", taskId, kcmd.JobId))
 	if err != nil {
-		return err
+		return fmt.Errorf("error while waiting for job pod to start: %v", err)
 	}
 
-	for _, v := range pods.Items {
-		req := clientset.CoreV1().Pods(kcmd.Namespace).GetLogs(v.Name, &corev1.PodLogOptions{})
-		podLogs, err := req.Stream(ctx)
+	go kcmd.streamLogs()
 
-		if err != nil {
-			return err
-		}
-
-		defer podLogs.Close()
-		buf := new(bytes.Buffer)
-		_, err = io.Copy(buf, podLogs)
-		if err != nil {
-			return err
-		}
-
-		var bytes = buf.Bytes()
-		_, err = kcmd.Stdout.Write(bytes)
-		if err != nil {
-			return err
-		}
+	err = waitForJobFinish(ctx, client, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s-%d", taskId, kcmd.JobId)})
+	if err != nil {
+		return fmt.Errorf("error while waiting for job to finish: %v", err)
 	}
 
 	return nil
+}
+
+func (kcmd KubernetesCommand) streamLogs() {
+	clientset, err := getKubernetesClientset()
+	if err != nil {
+		fmt.Println("Error while getting kubernetes clientset: ", err)
+		return
+	}
+
+	pods, err := clientset.CoreV1().Pods(kcmd.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s-%d", kcmd.TaskId, kcmd.JobId)})
+	if err != nil {
+		fmt.Println("Error while getting pods: ", err)
+		return
+	}
+
+	pod := pods.Items[0]
+	req := clientset.CoreV1().Pods(kcmd.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{Follow: true})
+	stream, err := req.Stream(context.TODO())
+
+	if err != nil {
+		fmt.Println("Error while opening log stream: ", err)
+		return
+	}
+
+	for {
+		buf := make([]byte, 512)
+		numBytes, err := stream.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Printf("Pod log stream closed.\n")
+				return
+			}
+
+			fmt.Printf("Error while reading logs for pod: %v\n", err)
+			return
+		}
+
+		_, err = kcmd.Stdout.Write(buf[:numBytes])
+
+		if err != nil {
+			fmt.Printf("Error while writing logs: %v\n", err)
+			return
+		}
+	}
 }
 
 // Deletes the job running the task.
@@ -132,36 +159,62 @@ func (kcmd KubernetesCommand) Stop() error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("deleting job: %v", err)
+		return fmt.Errorf("error while deleting job: %v", err)
 	}
 
 	return nil
 }
 
-// Waits until the job finishes
-func waitForJobFinish(ctx context.Context, client batchv1.JobInterface, listOptions metav1.ListOptions) {
+func waitForJobPodStart(ctx context.Context, namespace string, jobName string) error {
+	clientset, err := getKubernetesClientset()
+	if err != nil {
+		return err
+	}
+
 	ticker := time.NewTicker(10 * time.Second)
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
+		case <-ticker.C:
+			pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobName)})
+
+			if err != nil {
+				return err
+			}
+
+			if len(pods.Items) > 0 {
+				return nil
+			}
+		}
+	}
+}
+
+// Waits until the job finishes
+func waitForJobFinish(ctx context.Context, client batchv1.JobInterface, listOptions metav1.ListOptions) error {
+	ticker := time.NewTicker(10 * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
 		case <-ticker.C:
 			jobs, err := client.List(ctx, listOptions)
 
 			if err != nil {
-				return
+				return err
 			}
 
 			if len(jobs.Items) == 0 {
 				// Should not happen
-				return
+				return fmt.Errorf("job not found")
 			}
 
 			// There should be always only one job
 			job := jobs.Items[0]
 			if job.Status.Succeeded > 0 || job.Status.Failed > 0 {
-				return
+				return nil
 			}
 		}
 	}
