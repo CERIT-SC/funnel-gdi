@@ -109,7 +109,7 @@ func (s *SDA) resolveUrl(sdaUrl string) (httpUrl string, token string, err error
 		return
 	}
 
-	// Extract possible query paramaters – they would not go to path:
+	// Extract possible query parameters – they would not go to path:
 	if prefix, query, found := strings.Cut(sdaUrl, "?"); found {
 		actual.RawQuery = query
 		sdaUrl = prefix

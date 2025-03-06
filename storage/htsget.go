@@ -131,7 +131,7 @@ func (b *HTSGET) resolveUrl(htsgetUrl string) (httpUrl string, cleanHtsgetUrl st
 		token = ""
 	}
 
-	// Extract possible query paramaters – they would not go to path:
+	// Extract possible query parameters – they would not go to path:
 	if prefix, query, found := strings.Cut(htsgetUrl, "?"); found {
 		actual.RawQuery = query
 		htsgetUrl = prefix
