@@ -15,6 +15,9 @@ jobs:
   docker-image-push:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -38,6 +41,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
+          context: .
           push: true
           file: Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
