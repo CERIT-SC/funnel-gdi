@@ -32,7 +32,7 @@ func NewSDA(conf config.SDAStorage) (*SDA, error) {
 	client := &http.Client{
 		Timeout: time.Duration(conf.Timeout),
 	}
-	log := logger.NewLogger("htsget", logger.DefaultConfig())
+	log := logger.NewLogger("sda", logger.DefaultConfig())
 	return &SDA{conf, client, log}, nil
 }
 
