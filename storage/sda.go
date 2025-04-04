@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,6 +28,34 @@ type SDA struct {
 	log    *logger.Logger
 }
 
+// Used on S3 ListAllMyBucketsResult (XML) response
+type S3Buckets struct {
+	XMLName xml.Name   `xml:"Buckets"`
+	Buckets []S3Bucket `xml:"Bucket"`
+}
+
+// Used on S3 ListAllMyBucketsResult (XML) response
+type S3Bucket struct {
+	Name         string
+	CreationDate time.Time
+}
+
+// Used on S3 ListBucketResult (XML) response
+type S3Object struct {
+	Key  string
+	Size int
+}
+
+// XML root element when listing SDA dataset.
+type ListBucketResult struct {
+	Contents []S3Object
+}
+
+// XML root element when listing SDA.
+type ListAllMyBucketsResult struct {
+	Buckets S3Buckets
+}
+
 // NewSDA creates a new SDA-client instance based on the provided configuration.
 func NewSDA(conf config.SDAStorage) (*SDA, error) {
 	client := &http.Client{
@@ -38,31 +67,43 @@ func NewSDA(conf config.SDAStorage) (*SDA, error) {
 
 // UnsupportedOperations describes which operations (Get, Put, etc) are not
 // supported for the given URL.
-func (b *SDA) UnsupportedOperations(url string) UnsupportedOperations {
+func (s *SDA) UnsupportedOperations(url string) UnsupportedOperations {
 	if !strings.HasPrefix(url, "sda://") {
 		return AllUnsupported(&ErrUnsupportedProtocol{"sdaStorage"})
 	}
 	return UnsupportedOperations{
 		Join: fmt.Errorf("sdaStorage: Join operation is not supported"),
-		List: fmt.Errorf("sdaStorage: List operation is not supported"),
-		Stat: fmt.Errorf("sdaStorage: Stat operation is not supported"),
 		Put:  fmt.Errorf("sdaStorage: Put operation is not supported"),
 	}
 }
 
 // Join a directory URL with a subpath. Not supported with SDA.
-func (b *SDA) Join(url, path string) (string, error) {
+func (s *SDA) Join(url, path string) (string, error) {
 	return "", fmt.Errorf("sdaStorage: Join operation is not supported")
-}
-
-// List a directory. Calling List on a File is an error. Not supported with SDA.
-func (b *SDA) List(ctx context.Context, url string) ([]*Object, error) {
-	return nil, fmt.Errorf("sdaStorage: List operation is not supported")
 }
 
 // Not supported with SDA.
 func (b *SDA) Put(ctx context.Context, url, path string) (*Object, error) {
 	return nil, fmt.Errorf("sdaStorage: Put operation is not supported")
+}
+
+// List a directory. Calling List on a File is an error. Not supported with SDA.
+func (s *SDA) List(ctx context.Context, url string) ([]*Object, error) {
+	// Do GET request for root and dataset listings:
+	if strings.HasSuffix(url, "/") || strings.Contains(url, "/#") || !strings.Contains(url[6:], "/") {
+		resp, err := s.doRequest(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		return toObjects(resp, url)
+	}
+
+	// Do HEAD request for object listings:
+	resp, err := s.doRequest(ctx, "HEAD", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return []*Object{toObject(resp, url)}, nil
 }
 
 // Stat returns information about the object in SDA.
@@ -140,7 +181,7 @@ func (s *SDA) doRequest(
 		return
 	}
 
-	s.log.Info("Requesting file: " + url)
+	s.log.Info("Requesting file: " + method + " " + url)
 
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
@@ -161,13 +202,8 @@ func (s *SDA) doRequest(
 	if err != nil {
 		err = fmt.Errorf("sdaStorage: executing %s request: %s", method, err)
 	} else if resp.StatusCode != 200 {
-		var body []byte
-		if resp.Request.Body != nil {
-			body, _ = io.ReadAll(resp.Request.Body)
-		}
-		resp.Body.Close()
 		err = fmt.Errorf("sdaStorage: %s request returned status code %d: %s",
-			method, resp.StatusCode, string(body))
+			method, resp.StatusCode, shortBody(resp))
 	}
 
 	return
@@ -202,14 +238,75 @@ func downloadToFile(
 }
 
 func toObject(resp *http.Response, path string) *Object {
+	cleanPath, _, _ := strings.Cut(path, "#")
+	filename := cleanPath[strings.Index(cleanPath[7:], "/")+7:]
 	modtime, _ := http.ParseTime(resp.Header.Get("Last-Modified"))
 	etag := resp.Header.Get("ETag")
 
 	return &Object{
-		URL:          resp.Request.URL.String(),
-		Name:         path,
+		URL:          cleanPath,
+		Name:         filename,
 		Size:         resp.ContentLength,
 		LastModified: modtime,
 		ETag:         etag,
 	}
+}
+
+func toObjects(resp *http.Response, path string) ([]*Object, error) {
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read ListBucket response: %v", err)
+	}
+
+	cleanPath, _, _ := strings.Cut(path, "#")
+
+	// Root-level listing displays buckets (dataset identifiers):
+	if cleanPath == "sda://" {
+		var result ListAllMyBucketsResult
+		err = xml.Unmarshal(data, &result)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to unmarshal ListAllMyBucketsResult XML: %v", err)
+		}
+
+		objects := make([]*Object, len(result.Buckets.Buckets))
+		cleanPath, _, _ := strings.Cut(path, "#")
+		for i := range len(result.Buckets.Buckets) {
+			c := result.Buckets.Buckets[i]
+			objects[i] = &Object{
+				URL:          cleanPath + c.Name + "/",
+				Name:         c.Name,
+				LastModified: c.CreationDate,
+			}
+		}
+		return objects, nil
+	}
+
+	// Dataset-level listing displays objects:
+	var result ListBucketResult
+	err = xml.Unmarshal(data, &result)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to unmarshal ListBucket XML: %v", err)
+	}
+
+	objects := make([]*Object, len(result.Contents))
+	for i := range len(result.Contents) {
+		c := result.Contents[i]
+		objects[i] = &Object{
+			URL:  cleanPath + c.Key,
+			Name: c.Key,
+			Size: int64(c.Size),
+		}
+	}
+	return objects, nil
+}
+
+func shortBody(resp *http.Response) string {
+	if resp.Body == nil {
+		return ""
+	}
+
+	body := make([]byte, 1000)
+	n, _ := resp.Body.Read(body)
+	resp.Body.Close()
+	return string(body[:n])
 }
