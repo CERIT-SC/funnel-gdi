@@ -52,7 +52,7 @@ func (c *Crypt4gh) Read(buffer []byte) (n int, err error) {
 		n += addedCount
 	}
 
-	if n > 0 {
+	if err != nil && c.dataBlockPos < len(c.dataBlock) {
 		return n, nil
 	}
 
@@ -293,15 +293,25 @@ func (c *Crypt4gh) decryptDataBlock() error {
 	c.dataBlockCount++
 
 	block, err := c.readBytesMax(65564)
-	if err != nil {
+	if err != nil && len(block) == 0 {
 		return err
 	}
 
 	for i := range c.dataKeys {
 		key := c.dataKeys[i]
 
+		if key.NonceSize() >= len(block) {
+			log.Warn(fmt.Sprintf("Skipping data key (i=%d) as the block data "+
+				"(length=%d) covers only nonce (length=%d)",
+				i, len(block), key.NonceSize()))
+			continue
+		}
+
 		nonce := block[0:key.NonceSize()]
 		encryptedDataWithMac := block[key.NonceSize():]
+
+		log.Debug(fmt.Sprintf("Decrypting and data (%d) with nonce (%d).",
+			len(encryptedDataWithMac), len(nonce)))
 
 		plaintext, errOpen := key.Open(nil, nonce, encryptedDataWithMac, nil)
 
@@ -317,6 +327,7 @@ func (c *Crypt4gh) decryptDataBlock() error {
 				"data_block_number", c.dataBlockCount,
 				"tried_key_number", i+1,
 				"keys_count", len(c.dataKeys),
+				"error", errOpen.Error(),
 			)
 		}
 	}
@@ -403,7 +414,15 @@ func (c *Crypt4gh) readBytes(count uint) ([]byte, error) {
 
 func (c *Crypt4gh) readBytesMax(count uint) ([]byte, error) {
 	b := make([]byte, count)
-	actualCount, err := c.stream.Read(b)
+	actualCount := 0
+	readCount := 0
+	var err error
+
+	for actualCount < int(count) && err == nil {
+		readCount, err = c.stream.Read(b[actualCount:])
+		actualCount += readCount
+	}
+
 	return b[:actualCount], err
 }
 
