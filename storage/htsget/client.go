@@ -113,9 +113,12 @@ func (hc *Client) fetchFileInfo() (*FileInfo, error) {
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	body, _ := io.ReadAll(resp.Body)
+	var body []byte
+	if resp.Body != nil {
+		body, _ = io.ReadAll(resp.Body)
+	}
 
-	if resp.StatusCode != 200 && contentType != "application/json" {
+	if resp.StatusCode != 200 || body == nil || contentType != "application/json" {
 		return nil, fmt.Errorf("HTSGET service gave HTTP %d [%s] response: %s",
 			resp.StatusCode, contentType, string(body))
 	}
@@ -255,7 +258,7 @@ func (hu *Url) copyFromHttp(dst io.Writer, timeout time.Duration) error {
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	if resp.StatusCode != 206 {
+	if resp.StatusCode != 206 || resp.Body == nil {
 		return fmt.Errorf("Bad response from HTSGET service while fetching data: "+
 			"HTTP [%d] content-type [%s]", resp.StatusCode, contentType)
 	}

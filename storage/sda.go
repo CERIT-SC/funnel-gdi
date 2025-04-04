@@ -161,7 +161,10 @@ func (s *SDA) doRequest(
 	if err != nil {
 		err = fmt.Errorf("sdaStorage: executing %s request: %s", method, err)
 	} else if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Request.Body)
+		var body []byte
+		if resp.Request.Body != nil {
+			body, _ = io.ReadAll(resp.Request.Body)
+		}
 		resp.Body.Close()
 		err = fmt.Errorf("sdaStorage: %s request returned status code %d: %s",
 			method, resp.StatusCode, string(body))
@@ -192,7 +195,7 @@ func downloadToFile(
 	}
 
 	if _, err = io.Copy(dest, fsutil.Reader(ctx, stream)); err != nil {
-		return fmt.Errorf("sdaStorage: copying file: %s", err)
+		return fmt.Errorf("sdaStorage: copying HTTP payload to file: %s", err)
 	}
 
 	return nil
