@@ -10,9 +10,12 @@
 
 name: K8s Test
 
+# K8s setup requires more configuring for the needs of Funnel.
+# Currently switched to manual pipeline trigger until the setup is ready.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
+  #push:
+  #pull_request:
 
 jobs:
   build:
@@ -35,11 +38,11 @@ jobs:
       - name: Deploy Funnel
         run: |
           helm repo add ohsu https://ohsu-comp-bio.github.io/helm-charts
-          
+
           # 'local-path' is a k3d specific storage class used to automatically create a PersistentVolume
           # - Ref: https://k3d.io/v5.7.4/usage/k3s/#local-path-provisioner
           helm upgrade --install funnel ohsu/funnel --set storage.className=local-path --set storage.provisioner=local-path
-          
+
           # Wait for the Deployment to be available
           kubectl rollout status deployment/funnel --timeout=30s
 
@@ -53,6 +56,6 @@ jobs:
           funnel examples hello-world > hello-world.json
           ID=$(funnel task create hello-world.json)
           kubectl wait --for=condition=Complete job/$ID --timeout=60s
-          
+
           # Exits 0 if the task is complete, otherwise exits 1
           funnel task get $ID | grep -q COMPLETE
