@@ -34,7 +34,7 @@ jobs:
       run: |
         chmod +x ./funnel
         ./funnel server --LocalStorage.AllowedDirs $HOME run &
-
+    
     - name: Setup Java
       uses: actions/setup-java@v4
       with:

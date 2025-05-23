@@ -9,7 +9,7 @@ on:
 jobs:
 
   # Whenever a Git tag is created (in any branch containing this workflow file),
-  # this job automatically publishes an image: ghcr.io/<org|user>/repo:<git-tag>.
+  # this job automatically publishes an image: ghcr.io/<user/repo>:<git-tag>.
   # Currently the image is built for linux/amd64 and linux/arm64.
 
   docker-image-push:
@@ -33,7 +33,7 @@ jobs:
 
       - name: Extract metadata for the Docker image
         id: meta
-        uses: docker/metadata-action@v5.5.1
+        uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
           tags: type=ref,event=tag
