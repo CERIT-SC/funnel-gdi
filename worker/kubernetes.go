@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -58,7 +59,8 @@ func (kcmd KubernetesCommand) Run(ctx context.Context) error {
 		"TaskId":         taskId,
 		"JobId":          kcmd.JobId,
 		"Namespace":      kcmd.Namespace,
-		"Command":        command,
+		"Command":        strings.Join(command, " "),
+		"Env":            kcmd.Env,
 		"Workdir":        kcmd.Workdir,
 		"Volumes":        kcmd.Volumes,
 		"Cpus":           kcmd.Resources.CpuCores,
@@ -94,8 +96,7 @@ func (kcmd KubernetesCommand) Run(ctx context.Context) error {
 
 	var client = clientset.BatchV1().Jobs(kcmd.Namespace)
 
-	_, err = client.Create(ctx, job, metav1.CreateOptions{})
-
+	job, err = client.Create(ctx, job, metav1.CreateOptions{})
 	var maxRetries = 5
 
 	if err != nil {
@@ -113,30 +114,52 @@ func (kcmd KubernetesCommand) Run(ctx context.Context) error {
 			return fmt.Errorf("Funnel Worker: Failed to create Executor Job after %v attempts: %v", maxRetries, err)
 		}
 	}
+	var jobName = fmt.Sprintf("%s-%d", taskId, kcmd.JobId)
+
+	waitForJobPodStart(ctx, kcmd.Namespace, jobName)
 
 	// Wait until the job finishes
-	watcher, err := client.Watch(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s-%d", taskId, kcmd.JobId)})
+	watcher, err := client.Watch(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobName)})
 	defer watcher.Stop()
-	waitForJobFinish(ctx, watcher)
 
-	pods, err := clientset.CoreV1().Pods(kcmd.Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s-%d", taskId, kcmd.JobId)})
+	pods, err := clientset.CoreV1().Pods(kcmd.Namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobName)})
 	if err != nil {
 		return err
 	}
 
-	for _, v := range pods.Items {
-		// Wait for the pod to reach Running state
-		pod, err := waitForPodRunning(ctx, kcmd.Namespace, v.Name, 5*time.Minute)
-		if err != nil {
-			log.Fatalf("Error waiting for pod: %v", err)
-		}
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(pods.Items))
 
-		// Stream logs from the running pod
-		err = streamPodLogs(ctx, kcmd.Namespace, pod.Name, kcmd.Stdout)
+	for _, v := range pods.Items {
+		wg.Add(1)
+		go func(podName string) {
+			defer wg.Done()
+			// Wait for the pod to reach Running state
+			pod, err := waitForPodRunning(ctx, kcmd.Namespace, podName, 5*time.Minute)
+			if err != nil {
+				errChan <- fmt.Errorf("error waiting for pod %s: %v", podName, err)
+				return
+			}
+
+			// Stream logs from the running pod
+			err = streamPodLogs(ctx, kcmd.Namespace, pod.Name, kcmd.Stdout)
+			if err != nil {
+				errChan <- fmt.Errorf("error streaming logs from pod %s: %v", pod.Name, err)
+			}
+		}(v.Name)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors from goroutines
+	for err := range errChan {
 		if err != nil {
-			log.Fatalf("Error streaming logs: %v", err)
+			log.Printf("Error: %v", err)
 		}
 	}
+	waitForJobFinish(ctx, watcher)
 
 	return nil
 }
@@ -162,7 +185,13 @@ func waitForPodRunning(ctx context.Context, namespace string, podName string, ti
 				return nil, fmt.Errorf("getting pod %s: %v", podName, err)
 			}
 
-			return pod, nil
+			if pod.Status.Phase == corev1.PodRunning {
+				return pod, nil
+			} else if pod.Status.Phase == corev1.PodSucceeded {
+				return pod, nil
+			} else if pod.Status.Phase == corev1.PodFailed {
+				return nil, fmt.Errorf("pod %s failed", podName)
+			}
 		}
 	}
 }
@@ -173,7 +202,7 @@ func streamPodLogs(ctx context.Context, namespace string, podName string, stdout
 		return fmt.Errorf("getting kubernetes clientset: %v", err)
 	}
 
-	req := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{})
+	req := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{Follow: true})
 	podLogs, err := req.Stream(ctx)
 	if err != nil {
 		return fmt.Errorf("streaming logs: %v", err)
@@ -211,6 +240,32 @@ func (kcmd KubernetesCommand) GetStdout() io.Writer {
 
 func (kcmd KubernetesCommand) GetStderr() io.Writer {
 	return kcmd.Stderr
+}
+
+func waitForJobPodStart(ctx context.Context, namespace string, jobName string) error {
+	clientset, err := getKubernetesClientset()
+	if err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(10 * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("job-name=%s", jobName)})
+
+			if err != nil {
+				return err
+			}
+			// Currently there should be only one pod per job
+			if len(pods.Items) > 0 {
+				return nil
+			}
+		}
+	}
 }
 
 // Waits until the job finishes
