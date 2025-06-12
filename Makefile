@@ -5,12 +5,19 @@ TESTS=$(shell go list ./... | grep -v /vendor/ | grep -v github-release-notes)
 
 PROTO_INC=-I ./ -I $(shell pwd)/util/proto/
 
+datetime := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 git_commit := $(shell git rev-parse --short HEAD)
 git_branch := $(shell git symbolic-ref -q --short HEAD)
 git_upstream := $(shell git remote get-url $(shell git config branch.$(shell git symbolic-ref -q --short HEAD).remote) 2> /dev/null)
+git_tag := $(shell git tag --points-at HEAD)
+ifeq ($(strip $(git_tag)),)
+git_tag := $(git_branch)@$(git_commit)
+endif
+
 export GIT_BRANCH = $(git_branch)
 export GIT_UPSTREAM = $(git_upstream)
 
+# [Obsolete] We use git_tag for retrieving the version label.
 export FUNNEL_VERSION=0.11.1-rc.5
 
 # LAST_PR_NUMBER is used by the release notes builder to generate notes
@@ -18,10 +25,11 @@ export FUNNEL_VERSION=0.11.1-rc.5
 export LAST_PR_NUMBER = 716
 
 VERSION_LDFLAGS=\
- -X "github.com/ohsu-comp-bio/funnel/version.BuildDate=$(shell date)" \
- -X "github.com/ohsu-comp-bio/funnel/version.GitCommit= $(git_commit)" \
+ -X "github.com/ohsu-comp-bio/funnel/version.BuildDate=$(datetime)" \
+ -X "github.com/ohsu-comp-bio/funnel/version.GitCommit=$(git_commit)" \
  -X "github.com/ohsu-comp-bio/funnel/version.GitBranch=$(git_branch)" \
- -X "github.com/ohsu-comp-bio/funnel/version.GitUpstream=$(git_upstream)"
+ -X "github.com/ohsu-comp-bio/funnel/version.GitUpstream=$(git_upstream)" \
+ -X "github.com/ohsu-comp-bio/funnel/version.Version=$(git_tag)"
 
 export CGO_ENABLED=0
 
