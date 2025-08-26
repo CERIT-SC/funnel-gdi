@@ -1,6 +1,6 @@
 # build stage
 FROM golang:1.24-alpine AS build-env
-RUN apk add make git bash build-base
+RUN apk add make git bash build-base protobuf-dev
 WORKDIR /go/src/github.com/ohsu-comp-bio/funnel
 COPY go.* .
 RUN go mod download
