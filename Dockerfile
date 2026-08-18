@@ -1,6 +1,6 @@
 # build stage
 FROM golang:1.24-alpine AS build-env
-RUN apk add make git bash build-base
+RUN apk add make git bash build-base protobuf-dev
 ENV GOPATH=/go
 ENV PATH="/go/bin:${PATH}"
 
