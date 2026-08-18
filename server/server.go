@@ -125,13 +125,16 @@ func (s *Server) Serve(pctx context.Context) error {
 		return err
 	}
 
-	auth := NewAuthentication(s.BasicAuth, s.OidcAuth, s.TaskAccess)
+	auth := NewAuthentication(s.BasicAuth, s.OidcAuth, s.TaskAccess, s.Log)
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(
 			grpc_middleware.ChainUnaryServer(
 				// API auth check.
 				auth.Interceptor,
+				// Audit log of all API requests. Must come after the auth
+				// check, which establishes the user making the request.
+				newAuditInterceptor(s.Log),
 				newDebugInterceptor(s.Log),
 			),
 		),

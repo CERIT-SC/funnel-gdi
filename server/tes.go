@@ -38,6 +38,7 @@ type TaskService struct {
 // CreateTask provides an HTTP/gRPC endpoint for creating a task.
 // This is part of the TES implementation.
 func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.CreateTaskResponse, error) {
+	userID := GetUserID(ctx)
 
 	if err := tes.InitTask(task, true); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err.Error())
@@ -61,7 +62,7 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 	go func() {
 		err := ts.Compute.WriteEvent(ctx, events.NewTaskCreated(task))
 		if err != nil {
-			ts.Log.Error("error submitting task to compute backend", "taskID", task.Id, "error", err)
+			ts.Log.Error("error submitting task to compute backend", "taskID", task.Id, "userID", userID, "error", err)
 		}
 	}()
 
@@ -86,6 +87,7 @@ func (ts *TaskService) ListTasks(ctx context.Context, req *tes.ListTasksRequest)
 // CancelTask cancels a task
 func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskRequest) (*tes.CancelTaskResponse, error) {
 	result := &tes.CancelTaskResponse{}
+	userID := GetUserID(ctx)
 
 	// updated database and other event streams (includes access-checking)
 	err := ts.Event.WriteEvent(ctx, events.NewState(req.Id, tes.Canceled))
@@ -100,7 +102,7 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 	// dispatch to compute backend
 	err = ts.Compute.WriteEvent(ctx, events.NewState(req.Id, tes.Canceled))
 	if err != nil {
-		ts.Log.Error("compute backend failed to cancel task", "taskID", req.Id, "error", err)
+		ts.Log.Error("compute backend failed to cancel task", "taskID", req.Id, "userID", userID, "error", err)
 	}
 
 	return result, err
