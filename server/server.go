@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/gddo/httputil"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/ohsu-comp-bio/funnel/compute/scheduler"
 	"github.com/ohsu-comp-bio/funnel/config"
@@ -130,6 +131,10 @@ func (s *Server) Serve(pctx context.Context) error {
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(
 			grpc_middleware.ChainUnaryServer(
+				// Recover from panics in any of the interceptors/handlers below,
+				// converting them into a gRPC Internal error instead of crashing
+				// the whole server process.
+				grpc_recovery.UnaryServerInterceptor(),
 				// API auth check.
 				auth.Interceptor,
 				// Audit log of all API requests. Must come after the auth

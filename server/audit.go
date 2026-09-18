@@ -65,7 +65,7 @@ func auditTaskID(req interface{}, resp interface{}) string {
 		return r.Id
 	}
 
-	if r, ok := resp.(*tes.CreateTaskResponse); ok {
+	if r, ok := resp.(*tes.CreateTaskResponse); ok && r != nil {
 		return r.Id
 	}
 
