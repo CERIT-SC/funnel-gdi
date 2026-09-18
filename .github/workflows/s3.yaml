@@ -9,12 +9,15 @@ on:
     branches:
       - main
       - master
+      - master-gdi
   # Run on PR to main/master/develop
   pull_request:
     branches:
       - main
       - master
       - develop
+  # Allows manual runs from the Actions tab
+  workflow_dispatch:
 
 # Cancel redundant jobs (if a new job is triggered for the same workflow and ref)
 concurrency:
