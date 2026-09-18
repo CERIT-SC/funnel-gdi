@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-worker-config
+data:
+  funnel-worker-config.yml: |-
+{{ tpl (  .Files.Get "files/funnel-worker-config.yml" ) $ | b64enc | indent 4 }}

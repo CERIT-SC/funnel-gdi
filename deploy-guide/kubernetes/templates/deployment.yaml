@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ .Release.Name }}
+  name: {{ .Release.Name }}
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+        - args:
+            - server
+            - run
+            - '--config'
+            - /etc/config/funnel-server-config.yml
+          image: {{ .Values.image }}
+          imagePullPolicy: Always
+          name: funnel
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+            - containerPort: 9090
+              protocol: TCP
+          resources:
+            {{- toYaml $.Values.funnel.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - mountPath: /opt/funnel/funnel-work-dir
+              name: funnel-deployment-storage
+            - mountPath: /etc/config
+              name: config-volume
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.funnel.runAsUser }}
+{{- if .Values.funnel.seccompProfile }}
+        seccompProfile:
+          type: RuntimeDefault
+{{- end }}
+      serviceAccount: {{ .Values.funnel.serviceAccount }}
+{{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+{{- end }}
+      volumes:
+        - name: funnel-deployment-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.pvc.name }}
+        - secret:
+            defaultMode: 420
+            secretName: {{ .Release.Name }}-server-config 
+          name: config-volume

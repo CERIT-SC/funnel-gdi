@@ -1,0 +1,96 @@
+# Default values for the funnel-gdi chart.
+# Every placeholder below (<angle-bracket> values) must be replaced before
+# a real install — see ../DEPLOYMENT.md, Option 2, for the full walkthrough.
+# Everything else works as-is for a first try on a test namespace.
+
+# Image you built and pushed from the repo root (see DEPLOYMENT.md).
+image: <registry>/<registry-user>/funnel-gdi:<tag>
+
+# Name of a `kubernetes.io/dockerconfigjson` Secret (already created in
+# this namespace) the cluster should use to pull `image` above. Required
+# whenever that image lives in a private registry/repository/namespace.
+# Leave empty ("") for a public image.
+# See DEPLOYMENT.md for the `kubectl create secret docker-registry` command.
+imagePullSecret: ""
+
+# Compute backend. "kubernetes" runs each task as its own Job — this is
+# the only backend this chart's config files are written for.
+compute: kubernetes
+
+funnel:
+  # ServiceAccount used by BOTH the server pod and every per-task worker
+  # pod it creates. Created automatically when rbac.create is true.
+  serviceAccount: funnel-sa
+  runAsUser: 1000
+  seccompProfile: true
+  resources:
+    limits:
+      cpu: 2
+      memory: 4Gi
+      ephemeral-storage: 25Gi
+    requests:
+      cpu: 100m
+      memory: 4Gi
+      ephemeral-storage: 25Gi
+
+# Creates the ServiceAccount/Role/RoleBinding this chart needs (see
+# templates/serviceaccount.yaml, role.yaml, rolebinding.yaml). Set to
+# false if your cluster admin creates these for you separately — in that
+# case funnel.serviceAccount above must name whatever they created.
+rbac:
+  create: true
+
+# Shared storage for task inputs/outputs and the BoltDB task database.
+# Needs ReadWriteMany since both the server and every per-task worker pod
+# mount it at once.
+pvc:
+  name: storage
+  existing: false
+  storageClass: <your-rwx-storage-class>   # e.g. nfs-csi
+  size: 2Gi
+
+# Fallback/admin credentials for HTTP Basic Auth (works out of the box)
+# and the internal RPC client (server <-> worker communication, must stay
+# in sync with each other). Change the password before a real deployment.
+basicauth:
+  user: admin
+  password: <choose-a-strong-password>
+
+rpcclient:
+  user: admin
+  password: <same-as-basicauth.password>
+
+# Optional OIDC login for the web UI / API, layered on top of BasicAuth.
+# Leave disabled to get started; enable once you have an OIDC client
+# registered with your identity provider. RedirectURL must end in
+# "/login" and point at the host you set under `ingress` below.
+oidc:
+  enabled: false
+  url: <https://your-oidc-provider/.well-known/openid-configuration>
+  redirecturl: <https://funnel.your-domain.example/login>
+  clientid: <oidc-client-id>
+  clientsecret: <oidc-client-secret>
+  audience: ""   # optional
+
+# Optional S3-compatible object storage for task inputs/outputs. Leave
+# disabled if tasks only use inline/local inputs.
+s3:
+  disabled: true
+  endpoint: <https://your-s3-endpoint>
+  key: <s3-access-key>
+  secret: <s3-secret-key>
+
+# Only relevant if you enable htsget-backed storage (see the commented-out
+# HTSGETStorage block in files/funnel-*-config.yml).
+htsget:
+  disabled: true
+  protocol: https
+  sendpublickey: true
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: <your-cluster-issuer>   # e.g. letsencrypt-prod
+  host: <funnel.your-domain.example>

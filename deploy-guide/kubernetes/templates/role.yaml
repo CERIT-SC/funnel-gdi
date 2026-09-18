@@ -1,0 +1,28 @@
+{{- if .Values.rbac.create }}
+# Scoped to what the Funnel server and its per-task worker pods actually
+# call through the Kubernetes API (see DEPLOYMENT.md, "How the RBAC works").
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-funnel-role
+  labels:
+    app: {{ .Release.Name }}
+rules:
+  # The per-task worker pod watches its own pod and reads its logs to
+  # stream stdout/stderr back to the client.
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # The server creates one Job per task, watches/reconciles it
+  # (Kubernetes.ReconcileRate) and deletes it once the task finishes
+  # (unless Kubernetes.DisableJobCleanup is set). A worker running the
+  # "kubernetes" executor creates the same kind of nested Job per step.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Only exercised if you provision a PersistentVolumeClaim per task
+  # instead of sharing one PVC across all tasks.
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+{{- end }}

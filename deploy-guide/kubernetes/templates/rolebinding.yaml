@@ -1,0 +1,16 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-funnel-rolebinding
+  labels:
+    app: {{ .Release.Name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.funnel.serviceAccount }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-funnel-role
+{{- end }}

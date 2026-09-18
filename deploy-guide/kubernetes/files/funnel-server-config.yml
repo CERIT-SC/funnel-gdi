@@ -1,0 +1,133 @@
+Database: boltdb
+
+BoltDB:
+  Path: /opt/funnel/funnel-work-dir/funnel.bolt.db
+
+Compute: {{ .Values.compute }}
+
+Logger:
+  Level: debug
+
+# LocalStorage:
+#   AllowedDirs:
+#     - /opt/funnel/funnel-work-dir/results
+
+# HTSGETStorage:
+#   Disabled: {{ .Values.htsget.disabled }}
+#   Protocol: {{ .Values.htsget.protocol }}
+
+# SDAStorage:
+#   ServiceURL: http://sai-download:8443/
+
+# S3-compatible object storage for task inputs/outputs (optional — leave
+# s3.disabled: true in values.yaml if you don't have one).
+GenericS3:
+  - Disabled: {{ .Values.s3.disabled }}
+    Endpoint: {{ .Values.s3.endpoint | quote }}
+    Key: {{ .Values.s3.key | quote }}
+    Secret: {{ .Values.s3.secret | quote }}
+
+AmazonS3:
+  Disabled: true
+
+Server:
+{{- if .Values.oidc.enabled }}
+  # Require Bearer JWT authentication for the server APIs, in addition to
+  # BasicAuth below. Server won't launch if this URL is set but unreachable.
+  OidcAuth:
+    # URL of the OIDC service configuration:
+    ServiceConfigURL: {{ .Values.oidc.url | quote }}
+    # Client ID and secret are sent with the token introspection request
+    # (Basic authentication):
+    ClientId: {{ .Values.oidc.clientid | quote }}
+    ClientSecret: {{ .Values.oidc.clientsecret | quote }}
+    # Optional: if specified, this scope value must be in the token:
+    # RequireScope:
+    # Optional: if specified, this audience value must be in the token:
+    {{- if .Values.oidc.audience }}
+    RequireAudience: {{ .Values.oidc.audience | quote }}
+    {{- end }}
+    RedirectURL: {{ .Values.oidc.redirecturl | quote }}
+{{- end }}
+  BasicAuth:
+    - User: {{ .Values.basicauth.user | quote }}
+      Password: {{ .Values.basicauth.password | quote }}
+      Admin: true
+  
+  HostName: 0.0.0.0
+  
+RPCClient:
+  User: {{ .Values.basicauth.user | quote }}
+  Password: {{ .Values.basicauth.password | quote }}
+
+Kubernetes:
+  Executor: "kubernetes"
+  DisableJobCleanup: false
+  DisableReconciler: false
+  ReconcileRate: 5m
+  Namespace: {{ .Release.Namespace }}
+  Template: | 
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      ## DO NOT CHANGE NAME
+      name: {{ print "{{.TaskId}}" }}
+      namespace: {{ print "{{.Namespace}}" }}
+    spec: 
+      backoffLimit: 0
+      completions: 1
+      template:
+        spec:
+          serviceAccountName: {{ .Values.funnel.serviceAccount }}
+{{- if .Values.imagePullSecret }}
+          imagePullSecrets:
+            - name: {{ .Values.imagePullSecret }}
+{{- end }}
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers: 
+            - name: funnel-worker-{{ print "{{.TaskId}}" }}
+              image: {{ .Values.image }}
+              imagePullPolicy: Always
+              args:
+                - "worker"
+                - "run"
+                - "--config"
+                - "/etc/config/funnel-worker-config.yml"
+                - "--taskID"
+                - {{ print "{{.TaskId}}" }}
+              resources:
+                requests:
+                  cpu: {{ print "{{if ne .Cpus 0 -}}{{.Cpus}}{{ else }}{{\"100m\"}}{{end}}" }}
+                  memory: {{ print "{{if ne .RamGb 0.0 -}}{{printf \"%.0fG\" .RamGb}}{{else}}{{\"16M\"}}{{end}}" }}
+                  ephemeral-storage: {{ print "{{if ne .DiskGb 0.0 -}}{{printf \"%.0fG\" .DiskGb}}{{else}}{{\"100M\"}}{{end}}" }}
+                limits:
+                  cpu: 1000m
+                  memory: 1G
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: funnel-storage-{{ print "{{.TaskId}}" }}
+                  mountPath: /opt/funnel/funnel-work-dir/{{ print "{{.TaskId}}" }}
+                  subPath: {{ print "{{.TaskId}}" }}
+                - name: config-volume
+                  mountPath: /etc/config
+                - name: keys
+                  mountPath: /keys
+    
+          volumes: 
+            - name: config-volume
+              secret:
+                secretName: {{ .Release.Name }}-worker-config
+            - name: funnel-storage-{{ print "{{.TaskId}}" }}
+              persistentVolumeClaim:
+                claimName: {{ .Values.pvc.name }}
+            - name: keys
+              emptyDir: {{ print "{}" }}

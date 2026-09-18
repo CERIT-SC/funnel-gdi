@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-server-config
+data:
+  funnel-server-config.yml: |-
+{{ tpl (  .Files.Get "files/funnel-server-config.yml" ) $ | b64enc | indent 4 }}
+

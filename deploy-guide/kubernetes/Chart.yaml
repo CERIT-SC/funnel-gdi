@@ -1,0 +1,5 @@
+apiVersion: v2
+name: funnel-gdi
+version: 0.1.0
+appVersion: "0.1"
+description: Funnel (GDI fork) server on Kubernetes, using the Kubernetes compute backend to run each task as its own Job.

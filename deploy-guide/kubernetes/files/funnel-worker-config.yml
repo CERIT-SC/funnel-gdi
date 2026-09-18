@@ -1,0 +1,108 @@
+Database: boltdb
+
+Compute: {{ .Values.compute }}
+
+Logger:
+  Level: debug
+
+# HTSGETStorage:
+#   Disabled: {{ .Values.htsget.disabled }}
+#   Protocol: {{ .Values.htsget.protocol }}
+
+# SDAStorage:
+#   ServiceURL: http://sai-download:8443/
+
+GenericS3:
+  - Disabled: {{ .Values.s3.disabled }}
+    Endpoint: {{ .Values.s3.endpoint | quote }}
+    Key: {{ .Values.s3.key | quote }}
+    Secret: {{ .Values.s3.secret | quote }}
+
+AmazonS3:
+  Disabled: true
+
+# LocalStorage:
+#   AllowedDirs:
+#     - /opt/funnel/funnel-work-dir/results
+
+RPCClient:
+  MaxRetries: 3
+  Timeout: 30s
+  User: {{ .Values.basicauth.user | quote }}
+  Password: {{ .Values.basicauth.password | quote }}
+
+EventWriters:
+  - rpc
+  - log
+
+Server:
+  HostName: {{ .Release.Name }}
+  RPCPort: 9090
+
+
+Kubernetes:
+  # Change to "kubernetes" to use the kubernetes executor
+  Executor: {{ .Values.compute }}
+  Namespace: {{ .Release.Namespace }} 
+  ExecutorTemplate: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ print "{{.TaskId}}-{{.JobId}}" }}
+      namespace: {{ print "{{.Namespace}}" }}
+      labels:
+        job-name: {{ print "{{.TaskId}}-{{.JobId}}" }}
+    spec: 
+      backoffLimit: 0
+      completions: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers: 
+          - name: funnel-worker-{{ print "{{.TaskId}}" }}
+            image: {{ print "{{.Image}}" }}
+            imagePullPolicy: Always
+            command: ["/bin/sh", "-c"]
+            args: 
+            - {{ print "{{printf \"%q\" .Command}}" }}
+            workingDir: {{ print "{{.Workdir}}" }}
+            {{`{{if len .Env}}`}}
+            env:
+            {{`{{range $key, $value := .Env}}`}}
+            - name: {{`{{$key}}`}}
+              value: "{{`{{$value}}`}}"
+            {{`{{end}}`}}
+            {{`{{end}}`}}
+            resources:
+              requests:
+                cpu: {{ print "{{if ne .Cpus 0 -}}{{.Cpus}}{{ else }}{{\"100m\"}}{{end}}" }}
+                memory: {{ print "{{if ne .RamGb 0.0 -}}{{printf \"%.0fG\" .RamGb}}{{else}}{{\"16M\"}}{{end}}" }}
+                ephemeral-storage: {{ print "{{if ne .DiskGb 0.0 -}}{{printf \"%.0fG\" .DiskGb}}{{else}}{{\"100M\"}}{{end}}" }}
+              limits:
+                cpu: 1000m
+                memory: 5G
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - ALL
+            volumeMounts:
+            - name: storage
+              mountPath: /shared
+              subPath: shared
+            ### DO NOT CHANGE THIS
+            {{ print "{{range $idx, $item := .Volumes}}" }}
+            - name: storage 
+              mountPath: {{ print "{{$item.ContainerPath}}" }}
+              subPath: {{ print "{{$.TaskId}}{{$item.ContainerPath}}" }}
+            {{ print "{{end}}" }}
+
+          volumes: 
+          - name: storage
+            persistentVolumeClaim:
+              claimName: {{ .Values.pvc.name }}
