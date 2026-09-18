@@ -80,7 +80,7 @@ jobs:
                        -e "MINIO_ROOT_PASSWORD=minioadmin" \
                        -v /tmp/data:/data \
                        -v /tmp/config:/root/.minio \
-                       minio/minio server /data
+                       quay.io/minio/minio server /data
             cat `pwd`/tests/s3.config.yml >> config.yml
           fi
 
