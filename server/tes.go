@@ -50,7 +50,7 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 
 	err := ts.Compute.CheckBackendParameterSupport(task)
 	if err != nil {
-		return nil, fmt.Errorf("error from backend: %s", err)
+		return nil, status.Errorf(codes.InvalidArgument, "error from backend: %s", err)
 	}
 
 	ctx = context.WithValue(ctx, "Config", ts.Config)

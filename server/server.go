@@ -61,8 +61,8 @@ func newDebugInterceptor(log *logger.Logger) grpc.UnaryServerInterceptor {
 	}
 }
 
-// customErrorHandler is a custom error handler for the gRPC gateway
-// Returns '400' for invalid backend parameters and '500' for all other errors
+// customErrorHandler is a custom error handler for the gRPC gateway.
+// Maps gRPC status codes to HTTP status codes; unrecognized codes default to 500.
 // Required for TES Compliance Tests
 func customErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
 	const fallback = `{"error": "failed to process the request"}`
@@ -80,6 +80,8 @@ func customErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler ru
 		w.WriteHeader(http.StatusUnauthorized) // 401
 	case codes.PermissionDenied:
 		w.WriteHeader(http.StatusForbidden) // 403
+	case codes.InvalidArgument:
+		w.WriteHeader(http.StatusBadRequest) // 400
 	case codes.NotFound:
 		// Special case for missing tasks (TES Compliance Suite)
 		if strings.Contains(st.Message(), "task not found") {
@@ -88,11 +90,7 @@ func customErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler ru
 			w.WriteHeader(http.StatusNotFound) // 404
 		}
 	default:
-		if strings.Contains(st.Message(), "backend parameters not supported") {
-			w.WriteHeader(http.StatusBadRequest) // 400
-		} else {
-			w.WriteHeader(http.StatusInternalServerError) // 500
-		}
+		w.WriteHeader(http.StatusInternalServerError) // 500
 	}
 
 	// Write the error message
