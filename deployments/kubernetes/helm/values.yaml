@@ -30,8 +30,17 @@ serviceAccount:
   name: funnel-sa
 
 storage:
-  className: gp2
-  provisioner: kubernetes.io/aws-ebs
+  # Must be a StorageClass that supports ReadWriteMany (e.g. an NFS/CephFS CSI
+  # driver). This PVC (funnel-pvc) is shared by the Funnel server, every
+  # worker Job, and every executor Job, isolated only by subPath: {{.TaskId}}
+  # in the job templates - not by node-local access, so RWO backends (e.g.
+  # AWS EBS/gp2) will not work here.
+  className: nfs-csi
+  accessMode: ReadWriteMany
+  # Only used if createStorageClass is true below; nfs-csi normally already
+  # exists in-cluster and this chart doesn't need to create it.
+  provisioner: ""
+  createStorageClass: false
   enabled: true
   size: 10Gi
   path: /mnt/data
@@ -369,6 +378,17 @@ Kubernetes:
   Bucket: ""
   # The region to use for the task's Bucket
   Region: ""
+  # DisablePV turns off automatic per-task PersistentVolume/PersistentVolumeClaim
+  # provisioning. When true (our default), tasks instead share the single
+  # pre-existing PVC created by templates/pvc.yaml ("funnel-pvc"), which
+  # requires a ReadWriteMany-capable StorageClass - see the `storage` section
+  # above. Set to false to use upstream's default behavior of creating a
+  # dedicated PV/PVC per task instead.
+  DisablePV: true
+  # Per-task PV template, only used when DisablePV is false. See config/kubernetes-pv.yaml.
+  PVTemplate: ""
+  # Per-task PVC template, only used when DisablePV is false. See config/kubernetes-pvc.yaml.
+  PVCTemplate: ""
 
   # Configuration of the Kubernetes executor.
 

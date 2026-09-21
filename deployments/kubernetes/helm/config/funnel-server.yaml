@@ -14,6 +14,11 @@ Kubernetes:
   ExecutorTemplate: |
 {{ default (.Files.Get "config/kubernetes-executor-template.yaml") .Values.Kubernetes.ExecutorTemplate | indent 4 }}
   ExecutorTemplateFile: {{ .Values.Kubernetes.ExecutorTemplateFile }}
+  DisablePV: {{ .Values.Kubernetes.DisablePV }}
+  PVTemplate: |
+{{ default (.Files.Get "config/kubernetes-pv.yaml") .Values.Kubernetes.PVTemplate | indent 4 }}
+  PVCTemplate: |
+{{ default (.Files.Get "config/kubernetes-pvc.yaml") .Values.Kubernetes.PVCTemplate | indent 4 }}
 
 Database: {{ .Values.Database }}
 

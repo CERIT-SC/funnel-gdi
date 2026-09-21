@@ -74,6 +74,7 @@ func NewBackend(ctx context.Context, conf config.Kubernetes, reader tes.ReadOnly
 		template:    conf.Template,
 		pvTemplate:  conf.PVTemplate,
 		pvcTemplate: conf.PVCTemplate,
+		disablePV:   conf.DisablePV,
 		event:       writer,
 		database:    reader,
 		log:         log,
@@ -97,6 +98,7 @@ type Backend struct {
 	template          string
 	pvTemplate        string
 	pvcTemplate       string
+	disablePV         bool
 	event             events.Writer
 	database          tes.ReadOnlyServer
 	log               *logger.Logger
@@ -140,6 +142,18 @@ func (b *Backend) Close() {
 	//TODO: close database?
 }
 
+// pvcName returns the name of the PVC that a task's worker/executor pods
+// should mount. When per-task PV/PVC provisioning is disabled, every task
+// shares the same, pre-existing "funnel-pvc" (see templates/pvc.yaml),
+// isolated only via subPath. Otherwise each task gets its own PVC, created
+// by createPVC.
+func (b *Backend) pvcName(taskID string) string {
+	if b.disablePV {
+		return "funnel-pvc"
+	}
+	return fmt.Sprintf("funnel-pvc-%s", taskID)
+}
+
 // Create the Funnel Worker job from kubernetes-template.yaml
 // Executor job is created in worker/kubernetes.go#Run
 func (b *Backend) createJob(task *tes.Task) (*v1.Job, error) {
@@ -160,6 +174,7 @@ func (b *Backend) createJob(task *tes.Task) (*v1.Job, error) {
 		"Cpus":      res.GetCpuCores(),
 		"RamGb":     res.GetRamGb(),
 		"DiskGb":    res.GetDiskGb(),
+		"PVCName":   b.pvcName(task.Id),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("executing Worker template: %v", err)
@@ -268,40 +283,39 @@ func (b *Backend) deletePVC(ctx context.Context, taskID string) error {
 	return nil
 }
 
-// Submit creates both the PVC and the worker job with better error handling
+// Submit creates the worker job.
+//
+// Unless DisablePV is set, it first creates a dedicated PV/PVC pair for the
+// task (see createPVC/createPV). When DisablePV is set, no per-task storage
+// is created; the worker/executor job templates instead mount a single,
+// pre-existing, shared PVC ("funnel-pvc"), isolating tasks via subPath.
 func (b *Backend) Submit(ctx context.Context, task *tes.Task) error {
 	// Create a new background context instead of inheriting from the potentially canceled one
 	submitCtx := context.Background()
 
-	// TODO: Update this so that a PVC/PV is only created if the task has inputs or outputs
-	// If the task has either inputs or outputs, then create a PVC
-	// shared between the Funnel Worker and the Executor
-	// e.g. `if len(task.Inputs) > 0 || len(task.Outputs) > 0 {}`
-	pvc, err := b.createPVC(task)
-	if err != nil {
-		return fmt.Errorf("creating shared storage PVC: %v", err)
-	}
+	if !b.disablePV {
+		pvc, err := b.createPVC(task)
+		if err != nil {
+			return fmt.Errorf("creating shared storage PVC: %v", err)
+		}
 
-	pv, err := b.createPV(task)
-	if err != nil {
-		return fmt.Errorf("creating shared storage PV: %v", err)
-	}
+		pv, err := b.createPV(task)
+		if err != nil {
+			return fmt.Errorf("creating shared storage PV: %v", err)
+		}
 
-	clientset, err := kubernetes.NewForConfig(b.config)
-	if err != nil {
-		return fmt.Errorf("getting kubernetes client: %v", err)
-	}
+		clientset, err := kubernetes.NewForConfig(b.config)
+		if err != nil {
+			return fmt.Errorf("getting kubernetes client: %v", err)
+		}
 
-	// Create PVC
-	pvc, err = clientset.CoreV1().PersistentVolumeClaims(b.namespace).Create(context.Background(), pvc, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("creating PVC: %v", err)
-	}
+		if _, err = clientset.CoreV1().PersistentVolumeClaims(b.namespace).Create(context.Background(), pvc, metav1.CreateOptions{}); err != nil {
+			return fmt.Errorf("creating PVC: %v", err)
+		}
 
-	// Create PV
-	pv, err = clientset.CoreV1().PersistentVolumes().Create(context.Background(), pv, metav1.CreateOptions{})
-	if err != nil {
-		return fmt.Errorf("creating PV: %v", err)
+		if _, err = clientset.CoreV1().PersistentVolumes().Create(context.Background(), pv, metav1.CreateOptions{}); err != nil {
+			return fmt.Errorf("creating PV: %v", err)
+		}
 	}
 
 	// Create the worker job
@@ -332,9 +346,11 @@ func (b *Backend) deleteJob(ctx context.Context, taskID string) error {
 		return fmt.Errorf("deleting job: %v", err)
 	}
 
-	// Delete Worker PVC
-	if err := b.deletePVC(ctx, taskID); err != nil {
-		b.log.Error("failed to delete PVC", "taskID", taskID, "error", err)
+	// Delete Worker PVC (no-op if DisablePV is set; there's no per-task PVC).
+	if !b.disablePV {
+		if err := b.deletePVC(ctx, taskID); err != nil {
+			b.log.Error("failed to delete PVC", "taskID", taskID, "error", err)
+		}
 	}
 
 	return nil
@@ -396,9 +412,11 @@ ReconcileLoop:
 					}
 					b.log.Debug("reconcile: cleanuping up successful job", "taskID", j.Name)
 
-					// Delete Worker PVC
-					if err := b.deletePVC(ctx, j.Name); err != nil {
-						b.log.Error("failed to delete PVC", "taskID", j.Name, "error", err)
+					// Delete Worker PVC (no-op if DisablePV is set)
+					if !b.disablePV {
+						if err := b.deletePVC(ctx, j.Name); err != nil {
+							b.log.Error("failed to delete PVC", "taskID", j.Name, "error", err)
+						}
 					}
 
 					err := b.deleteJob(ctx, j.Name)
@@ -425,9 +443,11 @@ ReconcileLoop:
 						continue ReconcileLoop
 					}
 
-					// Delete Worker PVC
-					if err := b.deletePVC(ctx, j.Name); err != nil {
-						b.log.Error("reconcile: cleaning up PVC for failed job", "taskID", j.Name, "error", err)
+					// Delete Worker PVC (no-op if DisablePV is set)
+					if !b.disablePV {
+						if err := b.deletePVC(ctx, j.Name); err != nil {
+							b.log.Error("reconcile: cleaning up PVC for failed job", "taskID", j.Name, "error", err)
+						}
 					}
 
 					err = b.deleteJob(ctx, j.Name)

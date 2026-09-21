@@ -45,4 +45,4 @@ spec:
       volumes: 
       - name: funnel-storage-{{.TaskId}}
         persistentVolumeClaim:
-          claimName: funnel-pvc-{{.TaskId}}
+          claimName: {{.PVCName}}

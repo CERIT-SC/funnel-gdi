@@ -31,7 +31,20 @@ type KubernetesCommand struct {
 	Resources      *tes.Resources
 	ServiceAccount string
 	Clientset      kubernetes.Interface
+	// DisablePV mirrors config.Kubernetes.DisablePV. When true, the executor
+	// job mounts the shared "funnel-pvc" instead of a per-task PVC.
+	DisablePV bool
 	Command
+}
+
+// pvcName returns the name of the PVC the executor pod should mount. See
+// Backend.pvcName in compute/kubernetes/backend.go for the worker-side
+// equivalent; the naming convention must match.
+func (kcmd KubernetesCommand) pvcName() string {
+	if kcmd.DisablePV {
+		return "funnel-pvc"
+	}
+	return fmt.Sprintf("funnel-pvc-%s", kcmd.TaskId)
 }
 
 // Create the Executor K8s job from kubernetes-executor-template.yaml
@@ -68,6 +81,7 @@ func (kcmd KubernetesCommand) Run(ctx context.Context) error {
 		"DiskGb":         kcmd.Resources.DiskGb,
 		"ServiceAccount": kcmd.ServiceAccount,
 		"Image":          kcmd.Image,
+		"PVCName":        kcmd.pvcName(),
 	})
 
 	if err != nil {
