@@ -42,8 +42,8 @@ type Executor struct {
 	Namespace string
 	// Kubernetes service account name
 	ServiceAccount string
-	// DisablePV mirrors config.Kubernetes.DisablePV
-	DisablePV bool
+	// PVCMode mirrors config.Kubernetes.PVCMode ("full", "pvc", or "shared")
+	PVCMode string
 }
 
 // Run runs the Worker.
@@ -205,7 +205,7 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 					Namespace:    r.Executor.Namespace,
 					Resources:    resources,
 					Command:      command,
-					DisablePV:    r.Executor.DisablePV,
+					PVCMode:      r.Executor.PVCMode,
 				}
 			} else {
 				taskCommand = &DockerCommand{

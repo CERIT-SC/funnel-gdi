@@ -503,11 +503,19 @@ type Kubernetes struct {
 	PVTemplate string
 	// Worker/Executor PVC job template.
 	PVCTemplate string
-	// DisablePV turns off automatic per-task PersistentVolume/PersistentVolumeClaim
-	// provisioning (PVTemplate/PVCTemplate). When true, the worker and executor
-	// job templates instead mount a single, pre-existing, shared PVC named
-	// "funnel-pvc", isolating tasks from each other via subPath instead.
-	DisablePV bool
+	// PVCMode controls how per-task storage is provisioned. One of:
+	//   "full"   - create a dedicated PV + PVC per task (PVTemplate/PVCTemplate,
+	//              statically bound). This is the default/upstream behavior.
+	//   "pvc"    - create only a dedicated PVC per task (PVCTemplate), backed by
+	//              StorageClassName so the cluster dynamically provisions the PV.
+	//   "shared" - create nothing per task; the worker/executor job templates
+	//              mount a single, pre-existing, shared PVC named "funnel-pvc",
+	//              isolating tasks from each other via subPath instead.
+	// An empty value is treated as "full".
+	PVCMode string
+	// StorageClassName is the StorageClass used for the dynamically-provisioned
+	// PVC when PVCMode is "pvc". Unused for "full" and "shared".
+	StorageClassName string
 	// Path to the Kubernetes configuration file, otherwise assumes the Funnel server is running in a pod and
 	// attempts to use https://godoc.org/k8s.io/client-go/rest#InClusterConfig to infer configuration.
 	ConfigFile string

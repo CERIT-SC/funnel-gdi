@@ -13,4 +13,8 @@ spec:
   resources:
     requests:
       storage: 1Gi
+  {{- if .StorageClassName}}
+  storageClassName: {{.StorageClassName}}
+  {{- else}}
   volumeName: funnel-pv-{{.TaskId}}
+  {{- end}}

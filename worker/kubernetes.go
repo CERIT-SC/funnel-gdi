@@ -31,9 +31,11 @@ type KubernetesCommand struct {
 	Resources      *tes.Resources
 	ServiceAccount string
 	Clientset      kubernetes.Interface
-	// DisablePV mirrors config.Kubernetes.DisablePV. When true, the executor
-	// job mounts the shared "funnel-pvc" instead of a per-task PVC.
-	DisablePV bool
+	// PVCMode mirrors config.Kubernetes.PVCMode ("full", "pvc", or "shared").
+	// Only its "shared"-ness matters here: in "shared" mode the executor job
+	// mounts the shared "funnel-pvc"; otherwise ("full" or "pvc") it mounts
+	// the task's own PVC, created server-side (compute/kubernetes/backend.go).
+	PVCMode string
 	Command
 }
 
@@ -41,7 +43,7 @@ type KubernetesCommand struct {
 // Backend.pvcName in compute/kubernetes/backend.go for the worker-side
 // equivalent; the naming convention must match.
 func (kcmd KubernetesCommand) pvcName() string {
-	if kcmd.DisablePV {
+	if kcmd.PVCMode == "shared" {
 		return "funnel-pvc"
 	}
 	return fmt.Sprintf("funnel-pvc-%s", kcmd.TaskId)

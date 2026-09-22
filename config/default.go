@@ -176,6 +176,7 @@ func DefaultConfig() Config {
 	c.Kubernetes.Region = ""
 	c.Kubernetes.PVTemplate = string(pvTemplate)
 	c.Kubernetes.PVCTemplate = string(pvcTemplate)
+	c.Kubernetes.PVCMode = "full"
 	c.Kubernetes.ReconcileRate = reconcile
 
 	return c

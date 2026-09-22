@@ -27,6 +27,18 @@ import (
 	"github.com/ohsu-comp-bio/funnel/tes"
 )
 
+// Per-task storage provisioning modes. See config.Kubernetes.PVCMode.
+const (
+	// PVCModeFull creates a dedicated PV + PVC per task, statically bound.
+	PVCModeFull = "full"
+	// PVCModePVC creates only a dedicated PVC per task, dynamically
+	// provisioned via StorageClassName.
+	PVCModePVC = "pvc"
+	// PVCModeShared creates nothing per task; every task shares the single,
+	// pre-existing "funnel-pvc", isolated via subPath.
+	PVCModeShared = "shared"
+)
+
 // NewBackend returns a new local Backend instance.
 func NewBackend(ctx context.Context, conf config.Kubernetes, reader tes.ReadOnlyServer, writer events.Writer, log *logger.Logger) (*Backend, error) {
 	if conf.TemplateFile != "" {
@@ -41,6 +53,18 @@ func NewBackend(ctx context.Context, conf config.Kubernetes, reader tes.ReadOnly
 	}
 	if conf.Namespace == "" {
 		return nil, fmt.Errorf("invalid configuration; must provide a kubernetes namespace")
+	}
+
+	pvcMode := conf.PVCMode
+	if pvcMode == "" {
+		pvcMode = PVCModeFull
+	}
+	if pvcMode != PVCModeFull && pvcMode != PVCModePVC && pvcMode != PVCModeShared {
+		return nil, fmt.Errorf("invalid configuration; Kubernetes.PVCMode must be one of %q, %q, %q (got %q)",
+			PVCModeFull, PVCModePVC, PVCModeShared, pvcMode)
+	}
+	if pvcMode == PVCModePVC && conf.StorageClassName == "" {
+		return nil, fmt.Errorf("invalid configuration; Kubernetes.StorageClassName is required when PVCMode is %q", PVCModePVC)
 	}
 
 	var kubeconfig *rest.Config
@@ -67,18 +91,19 @@ func NewBackend(ctx context.Context, conf config.Kubernetes, reader tes.ReadOnly
 	}
 
 	b := &Backend{
-		bucket:      conf.Bucket,
-		region:      conf.Region,
-		client:      clientset.BatchV1().Jobs(conf.Namespace),
-		namespace:   conf.Namespace,
-		template:    conf.Template,
-		pvTemplate:  conf.PVTemplate,
-		pvcTemplate: conf.PVCTemplate,
-		disablePV:   conf.DisablePV,
-		event:       writer,
-		database:    reader,
-		log:         log,
-		config:      kubeconfig,
+		bucket:           conf.Bucket,
+		region:           conf.Region,
+		client:           clientset.BatchV1().Jobs(conf.Namespace),
+		namespace:        conf.Namespace,
+		template:         conf.Template,
+		pvTemplate:       conf.PVTemplate,
+		pvcTemplate:      conf.PVCTemplate,
+		pvcMode:          pvcMode,
+		storageClassName: conf.StorageClassName,
+		event:            writer,
+		database:         reader,
+		log:              log,
+		config:           kubeconfig,
 	}
 
 	if !conf.DisableReconciler {
@@ -98,7 +123,8 @@ type Backend struct {
 	template          string
 	pvTemplate        string
 	pvcTemplate       string
-	disablePV         bool
+	pvcMode           string
+	storageClassName  string
 	event             events.Writer
 	database          tes.ReadOnlyServer
 	log               *logger.Logger
@@ -143,12 +169,12 @@ func (b *Backend) Close() {
 }
 
 // pvcName returns the name of the PVC that a task's worker/executor pods
-// should mount. When per-task PV/PVC provisioning is disabled, every task
-// shares the same, pre-existing "funnel-pvc" (see templates/pvc.yaml),
-// isolated only via subPath. Otherwise each task gets its own PVC, created
-// by createPVC.
+// should mount. In PVCModeShared, every task shares the same, pre-existing
+// "funnel-pvc" (see templates/pvc.yaml), isolated only via subPath. In
+// PVCModeFull and PVCModePVC, each task gets its own PVC, created by
+// createPVC.
 func (b *Backend) pvcName(taskID string) string {
-	if b.disablePV {
+	if b.pvcMode == PVCModeShared {
 		return "funnel-pvc"
 	}
 	return fmt.Sprintf("funnel-pvc-%s", taskID)
@@ -202,13 +228,16 @@ func (b *Backend) createPVC(task *tes.Task) (*corev1.PersistentVolumeClaim, erro
 		return nil, fmt.Errorf("parsing template: %v", err)
 	}
 
-	// Template parameters
+	// Template parameters. StorageClassName is only non-empty in PVCModePVC;
+	// leaving it empty makes the template fall back to a static volumeName
+	// binding (PVCModeFull).
 	var buf bytes.Buffer
 	err = pvcTpl.Execute(&buf, map[string]interface{}{
-		"TaskId":    task.Id,
-		"Namespace": b.namespace,
-		"Bucket":    b.bucket,
-		"Region":    b.region,
+		"TaskId":           task.Id,
+		"Namespace":        b.namespace,
+		"Bucket":           b.bucket,
+		"Region":           b.region,
+		"StorageClassName": b.storageClassName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("executing PVC template: %v", err)
@@ -285,15 +314,21 @@ func (b *Backend) deletePVC(ctx context.Context, taskID string) error {
 
 // Submit creates the worker job.
 //
-// Unless DisablePV is set, it first creates a dedicated PV/PVC pair for the
-// task (see createPVC/createPV). When DisablePV is set, no per-task storage
-// is created; the worker/executor job templates instead mount a single,
-// pre-existing, shared PVC ("funnel-pvc"), isolating tasks via subPath.
+// Per-task storage provisioning depends on b.pvcMode:
+//   - PVCModeFull: creates a dedicated PV + PVC pair for the task (see
+//     createPVC/createPV), statically bound to each other.
+//   - PVCModePVC: creates only a dedicated PVC for the task; its
+//     storageClassName (see createPVC) makes the cluster provision the PV
+//     dynamically.
+//   - PVCModeShared: creates nothing; the worker/executor job templates
+//     mount the single, pre-existing, shared PVC ("funnel-pvc"), isolating
+//     tasks via subPath instead.
 func (b *Backend) Submit(ctx context.Context, task *tes.Task) error {
 	// Create a new background context instead of inheriting from the potentially canceled one
 	submitCtx := context.Background()
 
-	if !b.disablePV {
+	switch b.pvcMode {
+	case PVCModeFull:
 		pvc, err := b.createPVC(task)
 		if err != nil {
 			return fmt.Errorf("creating shared storage PVC: %v", err)
@@ -316,6 +351,24 @@ func (b *Backend) Submit(ctx context.Context, task *tes.Task) error {
 		if _, err = clientset.CoreV1().PersistentVolumes().Create(context.Background(), pv, metav1.CreateOptions{}); err != nil {
 			return fmt.Errorf("creating PV: %v", err)
 		}
+
+	case PVCModePVC:
+		pvc, err := b.createPVC(task)
+		if err != nil {
+			return fmt.Errorf("creating storage PVC: %v", err)
+		}
+
+		clientset, err := kubernetes.NewForConfig(b.config)
+		if err != nil {
+			return fmt.Errorf("getting kubernetes client: %v", err)
+		}
+
+		if _, err = clientset.CoreV1().PersistentVolumeClaims(b.namespace).Create(context.Background(), pvc, metav1.CreateOptions{}); err != nil {
+			return fmt.Errorf("creating PVC: %v", err)
+		}
+
+	case PVCModeShared:
+		// Nothing to create; tasks share the pre-existing "funnel-pvc".
 	}
 
 	// Create the worker job
@@ -346,8 +399,8 @@ func (b *Backend) deleteJob(ctx context.Context, taskID string) error {
 		return fmt.Errorf("deleting job: %v", err)
 	}
 
-	// Delete Worker PVC (no-op if DisablePV is set; there's no per-task PVC).
-	if !b.disablePV {
+	// Delete Worker PVC. No-op in PVCModeShared: there's no per-task PVC.
+	if b.pvcMode != PVCModeShared {
 		if err := b.deletePVC(ctx, taskID); err != nil {
 			b.log.Error("failed to delete PVC", "taskID", taskID, "error", err)
 		}
@@ -412,8 +465,8 @@ ReconcileLoop:
 					}
 					b.log.Debug("reconcile: cleanuping up successful job", "taskID", j.Name)
 
-					// Delete Worker PVC (no-op if DisablePV is set)
-					if !b.disablePV {
+					// Delete Worker PVC. No-op in PVCModeShared.
+					if b.pvcMode != PVCModeShared {
 						if err := b.deletePVC(ctx, j.Name); err != nil {
 							b.log.Error("failed to delete PVC", "taskID", j.Name, "error", err)
 						}
@@ -443,8 +496,8 @@ ReconcileLoop:
 						continue ReconcileLoop
 					}
 
-					// Delete Worker PVC (no-op if DisablePV is set)
-					if !b.disablePV {
+					// Delete Worker PVC. No-op in PVCModeShared.
+					if b.pvcMode != PVCModeShared {
 						if err := b.deletePVC(ctx, j.Name); err != nil {
 							b.log.Error("reconcile: cleaning up PVC for failed job", "taskID", j.Name, "error", err)
 						}

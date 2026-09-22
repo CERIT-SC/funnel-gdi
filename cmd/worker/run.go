@@ -89,7 +89,7 @@ func NewWorker(ctx context.Context, conf config.Config, log *logger.Logger, opts
 		executor.Template = conf.Kubernetes.ExecutorTemplate
 		executor.Namespace = conf.Kubernetes.Namespace
 		executor.ServiceAccount = conf.Kubernetes.ServiceAccount
-		executor.DisablePV = conf.Kubernetes.DisablePV
+		executor.PVCMode = conf.Kubernetes.PVCMode
 	}
 
 	return &worker.DefaultWorker{
