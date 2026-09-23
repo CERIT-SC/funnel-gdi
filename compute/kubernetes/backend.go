@@ -96,10 +96,12 @@ func NewBackend(ctx context.Context, conf config.Kubernetes, reader tes.ReadOnly
 		client:           clientset.BatchV1().Jobs(conf.Namespace),
 		namespace:        conf.Namespace,
 		template:         conf.Template,
+		workerImage:      conf.WorkerImage,
 		pvTemplate:       conf.PVTemplate,
 		pvcTemplate:      conf.PVCTemplate,
 		pvcMode:          pvcMode,
 		storageClassName: conf.StorageClassName,
+		sharedPVCName:    conf.SharedPVCName,
 		event:            writer,
 		database:         reader,
 		log:              log,
@@ -121,10 +123,12 @@ type Backend struct {
 	client            batchv1.JobInterface
 	namespace         string
 	template          string
+	workerImage       string
 	pvTemplate        string
 	pvcTemplate       string
 	pvcMode           string
 	storageClassName  string
+	sharedPVCName     string
 	event             events.Writer
 	database          tes.ReadOnlyServer
 	log               *logger.Logger
@@ -170,11 +174,14 @@ func (b *Backend) Close() {
 
 // pvcName returns the name of the PVC that a task's worker/executor pods
 // should mount. In PVCModeShared, every task shares the same, pre-existing
-// "funnel-pvc" (see templates/pvc.yaml), isolated only via subPath. In
-// PVCModeFull and PVCModePVC, each task gets its own PVC, created by
-// createPVC.
+// PVC (b.sharedPVCName, defaulting to "funnel-pvc"), isolated only via
+// subPath. In PVCModeFull and PVCModePVC, each task gets its own PVC,
+// created by createPVC.
 func (b *Backend) pvcName(taskID string) string {
 	if b.pvcMode == PVCModeShared {
+		if b.sharedPVCName != "" {
+			return b.sharedPVCName
+		}
 		return "funnel-pvc"
 	}
 	return fmt.Sprintf("funnel-pvc-%s", taskID)
@@ -201,6 +208,7 @@ func (b *Backend) createJob(task *tes.Task) (*v1.Job, error) {
 		"RamGb":     res.GetRamGb(),
 		"DiskGb":    res.GetDiskGb(),
 		"PVCName":   b.pvcName(task.Id),
+		"Image":     b.workerImage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("executing Worker template: %v", err)

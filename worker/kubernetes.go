@@ -33,9 +33,13 @@ type KubernetesCommand struct {
 	Clientset      kubernetes.Interface
 	// PVCMode mirrors config.Kubernetes.PVCMode ("full", "pvc", or "shared").
 	// Only its "shared"-ness matters here: in "shared" mode the executor job
-	// mounts the shared "funnel-pvc"; otherwise ("full" or "pvc") it mounts
-	// the task's own PVC, created server-side (compute/kubernetes/backend.go).
+	// mounts the shared PVC (SharedPVCName); otherwise ("full" or "pvc") it
+	// mounts the task's own PVC, created server-side
+	// (compute/kubernetes/backend.go).
 	PVCMode string
+	// SharedPVCName mirrors config.Kubernetes.SharedPVCName. Only used when
+	// PVCMode is "shared"; empty defaults to "funnel-pvc".
+	SharedPVCName string
 	Command
 }
 
@@ -44,6 +48,9 @@ type KubernetesCommand struct {
 // equivalent; the naming convention must match.
 func (kcmd KubernetesCommand) pvcName() string {
 	if kcmd.PVCMode == "shared" {
+		if kcmd.SharedPVCName != "" {
+			return kcmd.SharedPVCName
+		}
 		return "funnel-pvc"
 	}
 	return fmt.Sprintf("funnel-pvc-%s", kcmd.TaskId)

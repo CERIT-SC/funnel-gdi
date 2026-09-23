@@ -495,6 +495,10 @@ type Kubernetes struct {
 	Template string
 	// TemplateFile is the path to the job template.
 	TemplateFile string
+	// WorkerImage is the container image (repository:tag) the Worker Job
+	// runs - i.e. the Funnel binary itself, not a task's own image. Kept in
+	// sync with the server's own image so upgrading one upgrades both.
+	WorkerImage string
 	// Job template used for executing the tasks.
 	ExecutorTemplate string
 	// ExecutorTemplateFile is the path to the executor template.
@@ -516,6 +520,11 @@ type Kubernetes struct {
 	// StorageClassName is the StorageClass used for the dynamically-provisioned
 	// PVC when PVCMode is "pvc". Unused for "full" and "shared".
 	StorageClassName string
+	// SharedPVCName is the name of the single, pre-existing PVC every task
+	// mounts when PVCMode is "shared". Must match whatever the deploying
+	// Helm chart actually names that PVC. An empty value defaults to
+	// "funnel-pvc". Unused for "full" and "pvc".
+	SharedPVCName string
 	// Path to the Kubernetes configuration file, otherwise assumes the Funnel server is running in a pod and
 	// attempts to use https://godoc.org/k8s.io/client-go/rest#InClusterConfig to infer configuration.
 	ConfigFile string
