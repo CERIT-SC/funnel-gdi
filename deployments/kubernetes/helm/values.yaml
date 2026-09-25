@@ -35,7 +35,7 @@ storage:
   # worker Job, and every executor Job, isolated only by subPath: {{.TaskId}}
   # in the job templates - not by node-local access, so RWO backends (e.g.
   # AWS EBS/gp2) will not work here.
-  className: nfs-csi
+  className: ""
   accessMode: ReadWriteMany
   # Only used if createStorageClass is true below; nfs-csi normally already
   # exists in-cluster and this chart doesn't need to create it.
