@@ -1,6 +1,7 @@
 package local
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ohsu-comp-bio/funnel/config"
@@ -73,6 +74,6 @@ func TestBackendParamatersStrictFail(t *testing.T) {
 
 	err := b.CheckBackendParameterSupport(task)
 	if assert.Error(t, err) {
-		assert.Equal(t, err.Error(), "backend parameters not supported")
+		assert.True(t, strings.Contains(err.Error(), "backend parameters not supported: foo"))
 	}
 }

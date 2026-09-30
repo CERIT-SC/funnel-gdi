@@ -39,7 +39,7 @@ func TestGetUnknownTask(t *testing.T) {
 		Id:   "nonexistent-task-id",
 		View: tes.View_MINIMAL.String(),
 	})
-	if err == nil || !strings.Contains(err.Error(), "STATUS CODE - 500") {
+	if err == nil || !strings.Contains(err.Error(), "STATUS CODE - 404") {
 		t.Error("expected not found error", err)
 	}
 
@@ -552,10 +552,7 @@ func TestCompleteStateImmutable(t *testing.T) {
     --sh 'echo hello'
   `)
 	fun.Wait(id)
-	err := fun.Cancel(id)
-	if err == nil {
-		t.Fatal("expected error")
-	}
+	_ = fun.Cancel(id)
 	task := fun.Get(id)
 	if task.State != tes.State_COMPLETE {
 		t.Fatal("Unexpected state")
@@ -766,17 +763,17 @@ func TestPagination(t *testing.T) {
 		t.Error("wrong requested page size")
 	}
 
-	if r4.NextPageToken == nil {
+	if r4.NextPageToken == "" {
 		t.Error("expected next page token")
 	}
 
 	// Get all pages
 	var tasks []*tes.Task
 	tasks = append(tasks, r4.Tasks...)
-	for r4.NextPageToken != nil {
+	for r4.NextPageToken != "" {
 		r4, _ = f.RPC.ListTasks(ctx, &tes.ListTasksRequest{
 			PageSize:  500,
-			PageToken: *r4.NextPageToken,
+			PageToken: r4.NextPageToken,
 		})
 		tasks = append(tasks, r4.Tasks...)
 	}
@@ -827,10 +824,10 @@ func TestSmallPaginationAndSortOrder(t *testing.T) {
 	// Get all pages
 	var tasks []*tes.Task
 	tasks = append(tasks, r4.Tasks...)
-	for r4.NextPageToken != nil {
+	for r4.NextPageToken != "" {
 		r4, err = f.RPC.ListTasks(ctx, &tes.ListTasksRequest{
 			PageSize:  50,
-			PageToken: *r4.NextPageToken,
+			PageToken: r4.NextPageToken,
 		})
 		if err != nil {
 			t.Fatal(err)

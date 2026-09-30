@@ -108,6 +108,31 @@ funnel task create hello-world.json
   <img title="K8s Storage" src="/img/k8s-pvc.png" />
 </a>
 
+## Per-task storage modes (`PVCMode`)
+
+Tasks with inputs, outputs or volumes share data between the Worker and
+Executor pods through a PVC. How that storage is provisioned is controlled
+by `Kubernetes.PVCMode` (set the same value in the server and worker config):
+
+| Mode | Created per task | Requirements |
+|---|---|---|
+| `full` (default) | PV (S3 Mountpoint CSI) + statically bound PVC | `GenericS3` `Bucket`/`Region`, S3 CSI driver, ClusterRole for `persistentvolumes` |
+| `pvc` | PVC only, dynamically provisioned | `StorageClassName` of a `ReadWriteMany` StorageClass (e.g. NFS, CephFS) |
+| `shared` | nothing | a pre-existing `ReadWriteMany` PVC named `SharedPVCName` (default `funnel-pvc`); tasks are isolated by `subPath` |
+
+```yaml
+Kubernetes:
+  PVCMode: pvc
+  StorageClassName: nfs-csi
+```
+
+`pvc` and `shared` need only namespaced RBAC, which makes them suitable for
+shared/on-premise clusters without an S3 CSI driver. Custom `WorkerTemplate`,
+`ExecutorTemplate` and `PVCTemplate` should reference the claim as
+`{{.PVCName}}` and, in `PVCTemplate`, use `{{.StorageClassName}}` (see
+`config/kubernetes/worker-pvc.yaml`). `WorkerImage` optionally overrides the
+Worker Job image (default: the image of the running Funnel server pod).
+
 # Additional Resources 📚
 
 - [Helm Repo](https://ohsu-comp-bio.github.io/helm-charts)

@@ -80,12 +80,12 @@ s3:
   key: <s3-access-key>
   secret: <s3-secret-key>
 
-# Only relevant if you enable htsget-backed storage (see the commented-out
-# HTSGETStorage block in files/funnel-*-config.yml).
+# GA4GH input storage (HTSGETStorage / SDAStorage in files/funnel-*-config.yml).
+# Leave serviceurl empty to disable the backend.
 htsget:
-  disabled: true
-  protocol: https
-  sendpublickey: true
+  serviceurl: ""   # e.g. https://htsget.your-domain.example/
+sda:
+  serviceurl: ""   # e.g. http://sai-download:8443/
 
 ingress:
   enabled: true

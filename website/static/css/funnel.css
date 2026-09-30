@@ -222,6 +222,7 @@
 
 pre {
   padding: 0;
+  word-break: break-word;
 }
 
 .homepage-demo .section {
@@ -262,4 +263,13 @@ pre {
 }
 .copy-code-button:focus {
   outline: none;
+}
+
+details {
+  padding: 0.5em;
+}
+
+details summary {
+  cursor: pointer;
+  padding-bottom: 0.5em;
 }

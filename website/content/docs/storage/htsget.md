@@ -58,7 +58,8 @@ Htsget Storage configuration just requires a service URL to become active:
 ```yaml
 HTSGETStorage:
   ServiceURL: https://example.org:8443/htsget/
-  Timeout: 30s
+  Timeout:
+    duration: 30s
 ```
 
 If it's necessary to hard-code a fixed `Basic` authentication user for the

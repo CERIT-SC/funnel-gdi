@@ -1,6 +1,10 @@
+# Variant of the main Dockerfile for deployments running the local/manual
+# worker with the Docker executor: the final image contains the Docker CLI
+# (talking to a mounted Docker socket / DinD sidecar) instead of nerdctl.
+
 # build stage
-FROM golang:1.23-alpine AS build-env
-RUN apk add make git bash build-base protobuf-dev
+FROM golang:1.26-alpine AS build-env
+RUN apk add --no-cache make git bash build-base protobuf protobuf-dev
 ENV GOPATH=/go
 ENV PATH="/go/bin:${PATH}"
 
@@ -14,6 +18,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build make build
 FROM docker:cli
 WORKDIR /opt/funnel
 EXPOSE 8000 9090
-ENV PATH="/app:$PATH"
-COPY --from=build-env  /go/src/github.com/ohsu-comp-bio/funnel/funnel /app/
+ENV PATH="/app:${PATH}"
+COPY --from=build-env /go/src/github.com/ohsu-comp-bio/funnel/funnel /app/
 ENTRYPOINT ["/app/funnel"]

@@ -5,14 +5,14 @@
 Three ways to run Funnel (GDI fork), from quickest to most production-like. Pick one:
 
 - **[Option 1](#option-1-local-binary)** — local binary, for development.
-- **[Option 2](#option-2-kubernetes)** — Kubernetes, using the vendored chart in [`deployments/kubernetes/helm`](deployments/kubernetes/helm).
+- **[Option 2](#option-2-kubernetes)** — Kubernetes, using the GDI chart in [`deploy-guide/kubernetes`](deploy-guide/kubernetes).
 - **[Option 3](#option-3-docker-container-no-kubernetes)** — single Docker container, no cluster needed.
 
 Run every command below from the repository root.
 
 ## Option 1: Local binary
 
-Requirements: Go 1.24+, Docker daemon running.
+Requirements: Go 1.26+, Docker daemon running.
 
 ```bash
 make build
@@ -30,14 +30,9 @@ Jump to [Testing the server](#testing-the-server) to submit a task.
 
 ## Option 2: Kubernetes
 
-Deploys the vendored chart in [`deployments/kubernetes/helm/`](deployments/kubernetes/helm). Requirements: cluster access, `kubectl`, `helm` v3, a container registry the cluster can pull from.
+Deploys the GDI chart in [`deploy-guide/kubernetes/`](deploy-guide/kubernetes). Requirements: cluster access, `kubectl`, `helm` v3, a container registry the cluster can pull from.
 
-```bash
-kubectl auth can-i create clusterrole
-kubectl auth can-i create clusterrolebinding
-kubectl auth can-i create priorityclass
-```
-Confirms you can create the cluster-scoped objects this chart needs. Any `no`? Get your cluster admin to create them or grant the permission first.
+The chart only needs **namespaced** permissions (ServiceAccount, Role, RoleBinding, PVC, Deployment, Service, Secret, Ingress): all tasks share one `ReadWriteMany` PVC, isolated by `subPath` (`Kubernetes.PVCMode: shared`), so no per-task PersistentVolume and no ClusterRole is required.
 
 ```bash
 kubectl get namespaces
@@ -47,40 +42,46 @@ Find your namespace — most shared clusters assign one and you can't create you
 ```bash
 kubectl get storageclass
 ```
-Pick a StorageClass for `storage.className` (server's PVC, `ReadWriteOnce` is fine) and one that supports `ReadWriteMany` for `taskStorage.className` (per-task PVCs — every task fails without this).
+Pick a StorageClass that supports `ReadWriteMany` (e.g. `nfs-csi`) for `pvc.storageClass` — the server and every task pod mount the same PVC.
 
-(Optional) Build and push your own image instead of the default public `quay.io/ohsu-comp-bio/funnel:development`:
+Build and push the image:
 ```bash
 docker buildx build --platform linux/amd64 -t <registry>/<registry-user>/funnel-gdi:<tag> -f Dockerfile --push .
 ```
 
 ```bash
-cp deployments/kubernetes/helm/values.yaml my-values.yaml
+cp deploy-guide/kubernetes/values.yaml my-values.yaml
 ```
-Edit your copy: `image.repository`/`image.tag` (if you built your own), `storage.className`, `taskStorage.className`.
+Edit your copy and replace every `<placeholder>`: `image`, `pvc.storageClass`, `basicauth.password`, `ingress.host` (or set `ingress.enabled: false`), optionally `imagePullSecret`, `oidc.*`, `s3.*`, and the GA4GH inputs `sda.serviceurl` / `htsget.serviceurl` (empty = disabled).
 
 ```bash
-helm install my-funnel deployments/kubernetes/helm -n <namespace> -f my-values.yaml
+helm install my-funnel deploy-guide/kubernetes -n <namespace> -f my-values.yaml
 ```
-Installs everything: ServiceAccount, RBAC, PVC, Deployment, Service, config.
+Installs everything: ServiceAccount, RBAC, PVC, Deployment, Service, Ingress, server/worker config Secrets.
 
 ```bash
 kubectl get pods -n <namespace>
-kubectl port-forward -n <namespace> svc/funnel 8000:8000
+kubectl port-forward -n <namespace> svc/my-funnel 8000:8000
 ```
-Once the pod is `Running`, port-forward (this chart has no Ingress) and jump to [Testing the server](#testing-the-server).
+Once the pod is `Running`, port-forward (or use the Ingress host) and jump to [Testing the server](#testing-the-server).
 
 ```bash
 helm uninstall my-funnel -n <namespace>
-kubectl delete pvc my-funnel-pvc -n <namespace>
 ```
-Uninstalls the release. The PVC survives on purpose (`helm.sh/resource-policy: keep`) — delete it separately for a full wipe.
+Uninstalls the release, including the shared PVC (unless `pvc.existing: true`).
+
+**Per-task storage modes** (`Kubernetes.PVCMode` in `files/funnel-server-config.yml` and `files/funnel-worker-config.yml`, keep both in sync):
+- `shared` (this chart's default) — one pre-existing PVC (`SharedPVCName`) for all tasks.
+- `pvc` — a dedicated PVC per task, dynamically provisioned from `StorageClassName`; the Role already allows PVC create/delete.
+- `full` — upstream behaviour: a PV (S3 Mountpoint CSI, needs `GenericS3` `Bucket`/`Region`) + PVC per task; requires a ClusterRole for `persistentvolumes`.
+
+**Config format:** Funnel parses its config strictly (Protobuf) — unknown keys and wrongly-typed values (e.g. `RPCPort: 9090` instead of `"9090"`) stop the server at startup. Durations are written in seconds (`300s`, not `5m`), timeouts as `Timeout: {duration: 30s}`, and RPC credentials under `RPCClient.Credential`.
 
 **Troubleshooting:**
-- `Forbidden` on install → permissions check above.
-- Pod stuck `Pending` → cluster needs nodes labeled `role=workflow` (hardcoded in the worker Job template).
-- `ImagePullBackOff: pull access denied` → private image needs a pull secret (not a chart value — add via a values override).
-- Task submission fails → `taskStorage.className` isn't a working `ReadWriteMany` StorageClass.
+- `Forbidden` on install → your account lacks namespaced RBAC rights; set `rbac.create: false` and have an admin create the ServiceAccount/Role/RoleBinding.
+- `ImagePullBackOff: pull access denied` → set `imagePullSecret` to an existing `kubernetes.io/dockerconfigjson` Secret.
+- Server `CrashLoopBackOff` with `failed to unmarshal JSON with protojson` → a config key or value type is wrong (see *Config format* above).
+- Task submission fails → `pvc.storageClass` isn't a working `ReadWriteMany` StorageClass.
 
 ## Option 3: Docker container (no Kubernetes)
 

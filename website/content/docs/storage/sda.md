@@ -51,7 +51,8 @@ SDA Storage configuration just requires a service URL to become active:
 ```yaml
 SDAStorage:
   ServiceURL: https://example.org:8443/sda/
-  Timeout: 30s
+  Timeout:
+    duration: 30s
 ```
 
 If the `ServiceUrl` is undefined, `sda` protocol will be disabled.

@@ -6,7 +6,6 @@ import (
 	urllib "net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/ohsu-comp-bio/funnel/config"
 	"github.com/ohsu-comp-bio/funnel/storage/htsget"
@@ -27,11 +26,11 @@ import (
 // If credentials are omitted and the request for creating the task contains a
 // Bearer token, it will be automatically appended to the URL by Funnel.
 type HTSGET struct {
-	conf config.HTSGETStorage
+	conf *config.HTSGETStorage
 }
 
 // NewHTSGET creates a new HTSGET instance based on the provided configuration.
-func NewHTSGET(conf config.HTSGETStorage) (*HTSGET, error) {
+func NewHTSGET(conf *config.HTSGETStorage) (*HTSGET, error) {
 	return &HTSGET{conf: conf}, nil
 }
 
@@ -65,7 +64,7 @@ func (b *HTSGET) Get(ctx context.Context, url, path string) (*Object, error) {
 		return nil, err
 	}
 
-	client := htsget.NewClient(httpsUrl, token, time.Duration(b.conf.Timeout))
+	client := htsget.NewClient(httpsUrl, token, b.conf.GetTimeout().GetDuration().AsDuration())
 	err = client.DownloadTo(path)
 	if err != nil {
 		return nil, err

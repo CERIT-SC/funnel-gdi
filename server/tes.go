@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,11 +10,17 @@ import (
 	"github.com/ohsu-comp-bio/funnel/config"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
+	"github.com/ohsu-comp-bio/funnel/plugins/proto"
+	"github.com/ohsu-comp-bio/funnel/plugins/shared"
 	"github.com/ohsu-comp-bio/funnel/tes"
+	"github.com/ohsu-comp-bio/funnel/util/server"
 	"github.com/ohsu-comp-bio/funnel/version"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"google.golang.org/grpc"
 )
 
 // TaskService is a wrapper which handles common TES Task Service operations,
@@ -27,20 +34,97 @@ import (
 // GetServiceInfo, etc.
 type TaskService struct {
 	tes.UnimplementedTaskServiceServer
-	Name    string
-	Event   events.Writer
-	Compute events.Computer
-	Read    tes.ReadOnlyServer
-	Log     *logger.Logger
-	Config  config.Config
+	Name          string
+	Event         events.Writer
+	Compute       events.Computer
+	Read          tes.ReadOnlyServer
+	Log           *logger.Logger
+	Config        *config.Config
+	Plugin        shared.Authorize
+	PluginManager *shared.Manager
+}
+
+func (ts *TaskService) forbiddenPathPrefixes() []string {
+	if ts.Config == nil || ts.Config.Compute != "kubernetes" || ts.Config.Kubernetes == nil {
+		return nil
+	}
+	return ts.Config.Kubernetes.GetForbiddenPathPrefixes()
+}
+
+type contextKey string
+
+const InternalCallKey contextKey = "internalCall"
+
+// LoadPlugins loads plugins for a task.
+func (ts *TaskService) DoPluginAction(ctx context.Context, task *tes.Task, taskType proto.Type) (*proto.JobResponse, error) {
+	header := map[string]*proto.StringList{}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, fmt.Errorf("Headers not passed from context")
+	}
+	for k, v := range md {
+		// Some special headers start with ':' and cause downstream errors if kept
+		if !strings.HasPrefix(k, ":") {
+			header[k] = &proto.StringList{Values: v}
+		}
+	}
+	resp, err := ts.Plugin.PluginAction(ts.Config.Plugins.Params, header, ts.Config, task, taskType)
+	if err != nil {
+		return resp, fmt.Errorf("DoPluginAction: PluginAction failed: %w", err)
+	}
+	return resp, nil
+}
+
+func (ts *TaskService) HandleDoPluginAction(ctx context.Context, task *tes.Task, taskType proto.Type) (*proto.JobResponse, error) {
+	gob.Register(&config.TimeoutConfig_Duration{})
+	gob.Register(&config.TimeoutConfig_Disabled{})
+
+	pluginResponse, err := ts.DoPluginAction(ctx, task, taskType)
+	if err != nil {
+		return pluginResponse, fmt.Errorf("Error loading plugins: %v", err)
+	}
+	if pluginResponse.Code != 200 {
+		return pluginResponse, fmt.Errorf(
+			"Plugin returned error: code: %d, message: %s, user: %s, task: %v",
+			pluginResponse.Code,
+			pluginResponse.Message,
+			pluginResponse.UserId,
+			pluginResponse.Task,
+		)
+	}
+	if pluginResponse.Config == nil {
+		return pluginResponse, fmt.Errorf("Plugin returned empty config")
+	}
+	return pluginResponse, err
 }
 
 // CreateTask provides an HTTP/gRPC endpoint for creating a task.
 // This is part of the TES implementation.
 func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.CreateTaskResponse, error) {
-	userID := GetUserID(ctx)
+	if ts.Config.Plugins != nil {
+		pluginResponse, err := ts.HandleDoPluginAction(ctx, task, proto.Type_CREATE)
+		if err != nil {
+			if pluginResponse != nil && pluginResponse.Code != 0 {
+				return nil, status.Errorf(server.GRPCCodeFromHTTPStatus(int(pluginResponse.Code)), "%v", err.Error())
+			} else {
+				return nil, err
+			}
+		}
+		ts.Log.Debug("Plugin", "Response Code", pluginResponse.Code,
+			"Message", pluginResponse.Message,
+			"User", pluginResponse.UserId,
+			"Task", pluginResponse.Task,
+			"Config", pluginResponse.Config.Safe(),
+		)
+		ctx = context.WithValue(ctx, "pluginResponse", pluginResponse)
 
-	if err := tes.InitTask(task, true); err != nil {
+		// If using plugin, replace existing task with returned task from plugin
+		if pluginResponse.Task != nil {
+			task = pluginResponse.Task
+		}
+	}
+
+	if err := tes.InitTaskWithForbiddenPathPrefixes(task, true, ts.forbiddenPathPrefixes()); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err.Error())
 	}
 
@@ -48,21 +132,49 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	err := ts.Compute.CheckBackendParameterSupport(task)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "error from backend: %s", err)
+	if err := ts.Compute.CheckBackendParameterSupport(task); err != nil {
+		return nil, err
 	}
 
+	var err error
 	ctx = context.WithValue(ctx, "Config", ts.Config)
+
+	if ts.Config.Compute == "kubernetes" {
+		task.Resources, err = config.ValidateResources(task.Resources, ts.Config.Kubernetes.Resources)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid resources: %v", err)
+		}
+	}
+
 	if err := ts.Event.WriteEvent(ctx, events.NewTaskCreated(task)); err != nil {
 		return nil, fmt.Errorf("error creating task: %s", err)
 	}
 
+	pluginResponse := ctx.Value("pluginResponse")
+	conf := ctx.Value("Config")
+	userID := GetUserID(ctx)
+
 	// dispatch to compute backend
 	go func() {
-		err := ts.Compute.WriteEvent(ctx, events.NewTaskCreated(task))
+		workerCtx := context.Background()
+
+		if pluginResponse != nil {
+			workerCtx = context.WithValue(workerCtx, "pluginResponse", pluginResponse)
+		}
+		if conf != nil {
+			workerCtx = context.WithValue(workerCtx, "Config", conf)
+		}
+
+		err := ts.Compute.WriteEvent(workerCtx, events.NewTaskCreated(task))
+		ts.Log.Debug("submitted task to compute backend", "taskID", task.Id, "userID", userID, "error", err)
+
 		if err != nil {
-			ts.Log.Error("error submitting task to compute backend", "taskID", task.Id, "userID", userID, "error", err)
+			ts.Log.Debug("writing SystemError event for task", "taskID", task.Id, "error", err)
+			err = ts.Event.WriteEvent(workerCtx, events.NewState(task.Id, tes.SystemError))
+
+			if err != nil {
+				ts.Log.Error("error writing SystemError event after compute backend submission failure", "taskID", task.Id, "userID", userID, "error", err)
+			}
 		}
 	}()
 
@@ -72,6 +184,25 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 // GetTask calls GetTask on the underlying tes.ReadOnlyServer. If the underlying server
 // returns tes.ErrNotFound, TaskService will handle returning the appropriate gRPC error.
 func (ts *TaskService) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, error) {
+	/*
+			TODO: This function gets called internally via the GRPC client in many places.
+			To make this work with the plugin, would have to reconfigure the code to bipass the client
+			and talk directly to the underlying dbs.
+
+		if ts.Config.Plugins != nil {
+			ts.Log.Info("External GetTask request", "taskID", req.Id)
+			pluginResponse, err := ts.HandleDoPluginAction(ctx, &tes.Task{Id: req.Id}, proto.Type_GET)
+			if err != nil {
+				ts.Log.Error("Plugin authorization failed", "taskID", req.Id, "error", err)
+				return nil, err
+			}
+			ts.Log.Debug("Get Task Response: ", pluginResponse)
+			ctx = context.WithValue(ctx, "pluginResponse", pluginResponse)
+		} else {
+			ts.Log.Debug("Internal GetTask request, skipping plugin authorization", "taskID", req.Id)
+		}
+	*/
+
 	task, err := ts.Read.GetTask(ctx, req)
 	if err == tes.ErrNotFound {
 		err = status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
@@ -87,10 +218,50 @@ func (ts *TaskService) ListTasks(ctx context.Context, req *tes.ListTasksRequest)
 // CancelTask cancels a task
 func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskRequest) (*tes.CancelTaskResponse, error) {
 	result := &tes.CancelTaskResponse{}
-	userID := GetUserID(ctx)
+	if ts.Config.Plugins != nil {
+		pluginResponse, err := ts.HandleDoPluginAction(ctx, nil, proto.Type_CANCEL)
+		if err != nil {
+			if pluginResponse != nil && pluginResponse.Code != 0 {
+				return nil, status.Errorf(server.GRPCCodeFromHTTPStatus(int(pluginResponse.Code)), "%v", err.Error())
+			} else {
+				return nil, err
+			}
+		}
+		ts.Log.Debug("Plugin", "Response Code", pluginResponse.Code,
+			"Message", pluginResponse.Message,
+			"User", pluginResponse.UserId,
+			"Task", pluginResponse.Task,
+			"Config", pluginResponse.Config.Safe(),
+		)
+		ctx = context.WithValue(ctx, "pluginResponse", pluginResponse)
+	}
+
+	// Get current task state to check if it's already terminal
+	task, err := ts.Read.GetTask(ctx, &tes.GetTaskRequest{
+		Id: req.Id,
+	})
+	if err == tes.ErrNotFound {
+		return result, status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
+	} else if err != nil {
+		return result, err
+	}
+
+	// Check if task is already in a terminal state
+	if tes.TerminalState(task.State) {
+		ts.Log.Info("Task already in terminal state, skipping cancel",
+			"taskId", req.Id,
+			"state", task.State)
+
+		// Return success with informational message via metadata
+		msg := fmt.Sprintf("Task is already in %s state, no action needed", task.State)
+		if err := grpc.SetHeader(ctx, metadata.Pairs("X-Funnel-Message", msg)); err != nil {
+			ts.Log.Error("Failed to set gRPC header", "error", err)
+		}
+		return result, nil
+	}
 
 	// updated database and other event streams (includes access-checking)
-	err := ts.Event.WriteEvent(ctx, events.NewState(req.Id, tes.Canceled))
+	err = ts.Event.WriteEvent(ctx, events.NewState(req.Id, tes.Canceled))
 	if err == tes.ErrNotFound {
 		return result, status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
 	} else if err == tes.ErrNotPermitted {
@@ -99,13 +270,23 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 		return result, err
 	}
 
-	// dispatch to compute backend
-	err = ts.Compute.WriteEvent(ctx, events.NewState(req.Id, tes.Canceled))
-	if err != nil {
-		ts.Log.Error("compute backend failed to cancel task", "taskID", req.Id, "userID", userID, "error", err)
+	// Dispatch to the compute backend to clean up underlying resources (K8s jobs,
+	// PVs, etc.). The task is already marked Canceled in the database above, so
+	// cleanup is best-effort: a failure here (e.g. a resource already gone, or a
+	// transient API error) must not fail the cancel request with a 500. Record the
+	// failure in the task's system logs instead so it remains visible.
+	if err := ts.Compute.WriteEvent(ctx, events.NewState(req.Id, tes.Canceled)); err != nil {
+		ts.Log.Error("compute backend failed to clean up resources during cancel", "taskID", req.Id, "error", err)
+		if logErr := ts.Event.WriteEvent(ctx, events.NewSystemLog(
+			req.Id, 0, 0, "error",
+			"Error cleaning up compute resources during cancel",
+			map[string]string{"error": err.Error()},
+		)); logErr != nil {
+			ts.Log.Error("failed to write system log for cancel cleanup error", "taskID", req.Id, "error", logErr)
+		}
 	}
 
-	return result, err
+	return result, nil
 }
 
 // GetServiceInfo returns service metadata.
@@ -134,10 +315,10 @@ func (ts *TaskService) GetServiceInfo(ctx context.Context, info *tes.GetServiceI
 		Type: &tes.ServiceType{
 			Artifact: "tes",
 			Group:    "org.ga4gh",
-			Version:  version.String(),
+			Version:  version.Version,
 		},
 		UpdatedAt: time.Now().Format(time.RFC3339),
-		Version:   version.String(),
+		Version:   version.Version,
 	}
 
 	/*
@@ -162,6 +343,10 @@ func (ts *TaskService) GetServiceInfo(ctx context.Context, info *tes.GetServiceI
 	return resp, nil
 }
 
+// ReplaceInputBearerToken appends the Bearer token of the current user to
+// task inputs from SDA ("sda://") and HTSGET ("htsget://") services, so that
+// the worker can fetch the data on behalf of the user. Inputs which already
+// specify credentials after the hash-sign ('#') are left untouched.
 func ReplaceInputBearerToken(ctx context.Context, task *tes.Task) error {
 	userInfo, ok := ctx.Value(UserInfoKey).(*UserInfo)
 	noToken := !ok || userInfo.Token == ""

@@ -139,8 +139,7 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		if err != nil {
 			return nil, err
 		}
-		token := c.String()
-		resp.NextPageToken = &token
+		resp.NextPageToken = c.String()
 	}
 
 	return resp, nil

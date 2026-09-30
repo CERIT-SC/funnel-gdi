@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	badger "github.com/dgraph-io/badger/v2"
-	proto "github.com/golang/protobuf/proto"
 	"github.com/ohsu-comp-bio/funnel/server"
 	"github.com/ohsu-comp-bio/funnel/tes"
+	"google.golang.org/protobuf/proto"
 )
 
 // GetTask gets a task, which describes a running task
@@ -126,7 +126,7 @@ func (db *Badger) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*te
 	}
 
 	if len(tasks) == pageSize {
-		out.NextPageToken = &tasks[len(tasks)-1].Id
+		out.NextPageToken = tasks[len(tasks)-1].Id
 	}
 
 	return &out, nil

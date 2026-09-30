@@ -23,7 +23,7 @@ import (
 // The Bearer token is implicitly taken from a task request and used when
 // requesting a file from SDA.
 type SDA struct {
-	conf   config.SDAStorage
+	conf   *config.SDAStorage
 	client *http.Client
 	log    *logger.Logger
 }
@@ -57,9 +57,9 @@ type ListAllMyBucketsResult struct {
 }
 
 // NewSDA creates a new SDA-client instance based on the provided configuration.
-func NewSDA(conf config.SDAStorage) (*SDA, error) {
+func NewSDA(conf *config.SDAStorage) (*SDA, error) {
 	client := &http.Client{
-		Timeout: time.Duration(conf.Timeout),
+		Timeout: conf.GetTimeout().GetDuration().AsDuration(),
 	}
 	log := logger.NewLogger("sda", logger.DefaultConfig())
 	return &SDA{conf, client, log}, nil

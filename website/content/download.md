@@ -1,38 +1,61 @@
 ---
-title: Download 0.11.0
+title: Download
 menu:
   main:
-    weight: -2000
+    weight: -1000
 ---
 
-{{< download-links >}}
+# Download
 
-Funnel is a single binary.  
-Funnel requires [Docker][docker].  
-Funnel is beta quality. APIs might break, bugs exist, data might be lost.  
+> [!NOTE]
+>
+> Funnel requires that [Docker](https://docker.io) be installed in order to run commands within a sandboxed environment.
 
-### Homebrew
+## 1. Quick Start
+
+Run the following [install script](https://github.com/ohsu-comp-bio/funnel/blob/develop/install.sh) to fetch latest version of Funnel from [GitHub Releases](https://github.com/ohsu-comp-bio/funnel/releases):
 
 ```sh
-brew tap ohsu-comp-bio/formula
-brew install funnel@0.11
+curl -fsSL https://ohsu-comp-bio.github.io/funnel/install.sh | bash
 ```
 
-<h3>Build the lastest development version <i class="optional">optional</i></h3>
+## 2. Containers
 
-In order to build the latest code, run:
-```shell
-$ git clone https://github.com/ohsu-comp-bio/funnel.git
-$ cd funnel
-$ make
+### Docker
+
+> [!TIP]
+>
+> Docker Image → [quay.io/repository/ohsu-comp-bio/funnel:latest](https://quay.io/repository/ohsu-comp-bio/funnel?tab=tags&tag=testing)
+
+```sh
+docker run -p 8000:8000 quay.io/ohsu-comp-bio/funnel:latest server run
+
+# With config
+docker run -p 8000:8000 -v ./config.yaml:/config.yaml quay.io/ohsu-comp-bio/funnel:latest server run --config /config.yaml
 ```
 
-Funnel requires Go 1.21+. Check out the [development docs][dev] for more detail.
+### Podman
 
-### Release History
+> [!TIP]
+>
+> [Podman: Running a container](https://podman.io/docs#running-a-container)
 
-See the [Releases](https://github.com/ohsu-comp-bio/funnel/releases)  page for release history.
+```sh
+podman run -p 8000:8000 quay.io/ohsu-comp-bio/funnel:latest server run
 
+# With config
+podman run -p 8000:8000 -v ./config.yaml:/config.yaml quay.io/ohsu-comp-bio/funnel:latest server run --config /config.yaml
+```
 
-[dev]: /docs/development/developers/
-[docker]: https://docker.io
+### Singularity
+
+> [!TIP]
+>
+> [Singularity and Docker](https://docs.sylabs.io/guides/2.6/user-guide/singularity_and_docker.html)
+
+```sh
+singularity run docker://quay.io/ohsu-comp-bio/funnel:latest server run 
+
+# With config
+singularity run --bind config.yaml:/config.yaml docker://quay.io/ohsu-comp-bio/funnel:latest server run --config /config.yaml
+```

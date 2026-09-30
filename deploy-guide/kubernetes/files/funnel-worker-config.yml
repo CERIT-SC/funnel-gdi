@@ -5,12 +5,17 @@ Compute: {{ .Values.compute }}
 Logger:
   Level: debug
 
-# HTSGETStorage:
-#   Disabled: {{ .Values.htsget.disabled }}
-#   Protocol: {{ .Values.htsget.protocol }}
+# GA4GH inputs: htsget://{reads|variants}/... and sda://dataset/path.
+# A backend is enabled only when its ServiceURL is set (see values.yaml).
+HTSGETStorage:
+  ServiceURL: {{ .Values.htsget.serviceurl | quote }}
+  Timeout:
+    duration: 30s
 
-# SDAStorage:
-#   ServiceURL: http://sai-download:8443/
+SDAStorage:
+  ServiceURL: {{ .Values.sda.serviceurl | quote }}
+  Timeout:
+    duration: 30s
 
 GenericS3:
   - Disabled: {{ .Values.s3.disabled }}
@@ -27,9 +32,11 @@ AmazonS3:
 
 RPCClient:
   MaxRetries: 3
-  Timeout: 30s
-  User: {{ .Values.basicauth.user | quote }}
-  Password: {{ .Values.basicauth.password | quote }}
+  Timeout:
+    duration: 30s
+  Credential:
+    User: {{ .Values.basicauth.user | quote }}
+    Password: {{ .Values.basicauth.password | quote }}
 
 EventWriters:
   - rpc
@@ -37,19 +44,23 @@ EventWriters:
 
 Server:
   HostName: {{ .Release.Name }}
-  RPCPort: 9090
+  RPCPort: "9090"
 
 
 Kubernetes:
   # Change to "kubernetes" to use the kubernetes executor
   Executor: {{ .Values.compute }}
-  Namespace: {{ .Release.Namespace }} 
+  Namespace: {{ .Release.Namespace }}
+  # All tasks share the chart's single PVC (templates/pvc.yaml), isolated
+  # by subPath, so no per-task PV/PVC (and no ClusterRole) is needed.
+  PVCMode: shared
+  SharedPVCName: {{ .Values.pvc.name }}
   ExecutorTemplate: |
     apiVersion: batch/v1
     kind: Job
     metadata:
       name: {{ print "{{.TaskId}}-{{.JobId}}" }}
-      namespace: {{ print "{{.Namespace}}" }}
+      namespace: {{ print "{{.JobsNamespace}}" }}
       labels:
         job-name: {{ print "{{.TaskId}}-{{.JobId}}" }}
     spec: 
@@ -67,9 +78,16 @@ Kubernetes:
           - name: funnel-worker-{{ print "{{.TaskId}}" }}
             image: {{ print "{{.Image}}" }}
             imagePullPolicy: Always
+            {{`{{- if .UseShell}}`}}
             command: ["/bin/sh", "-c"]
-            args: 
-            - {{ print "{{printf \"%q\" .Command}}" }}
+            args:
+            - {{`{{printf "%q" (index .Command 0)}}`}}
+            {{`{{- else}}`}}
+            command:
+            {{`{{- range .Command}}`}}
+            - {{`{{printf "%q" .}}`}}
+            {{`{{- end}}`}}
+            {{`{{- end}}`}}
             workingDir: {{ print "{{.Workdir}}" }}
             {{`{{if len .Env}}`}}
             env:
@@ -105,4 +123,4 @@ Kubernetes:
           volumes: 
           - name: storage
             persistentVolumeClaim:
-              claimName: {{ .Values.pvc.name }}
+              claimName: {{ print "{{.PVCName}}" }}

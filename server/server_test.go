@@ -38,8 +38,28 @@ func TestCustomErrorHandlerStatusCodes(t *testing.T) {
 			want: http.StatusNotFound,
 		},
 		{
-			name: "not found with 'task not found' message stays 500 (TES Compliance Suite workaround)",
+			name: "not found with 'task not found' message maps to 404",
 			err:  status.Errorf(codes.NotFound, "task not found: taskID: abc"),
+			want: http.StatusNotFound,
+		},
+		{
+			name: "already exists maps to 409",
+			err:  status.Errorf(codes.AlreadyExists, "task already exists"),
+			want: http.StatusConflict,
+		},
+		{
+			name: "canceled maps to 499",
+			err:  status.Errorf(codes.Canceled, "client went away"),
+			want: 499,
+		},
+		{
+			name: "deadline exceeded maps to 504",
+			err:  status.Errorf(codes.DeadlineExceeded, "timed out"),
+			want: http.StatusGatewayTimeout,
+		},
+		{
+			name: "internal (e.g. recovered panic) maps to 500",
+			err:  status.Errorf(codes.Internal, "panic"),
 			want: http.StatusInternalServerError,
 		},
 		{
