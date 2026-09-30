@@ -6,6 +6,7 @@ separate PR. Last synced with upstream: `eff51273` (2026-09-02, v0.12.x).
 
 | Feature | Files | Tests | Upstream PR readiness |
 |---|---|---|---|
+| **Namespaced-RBAC-friendly cleanup**: task/orphan cleanup only touches PersistentVolumes in `full` mode and ServiceAccounts only when Funnel creates them (`ServiceAccountTemplate` / `_WORKER_SA`) | `compute/kubernetes/backend.go` (`cleanResources`, `CleanOrphanedResources`) | `compute/kubernetes/pvc_mode_test.go` (`TestNamespacedRBAC_NoClusterOrSACalls`) | Ready; fixes `Forbidden` errors on namespaced deployments. |
 | **Per-task storage modes** `Kubernetes.PVCMode` = `full` \| `pvc` \| `shared` (+ `StorageClassName`, `SharedPVCName`, `WorkerImage`) | `config/config.proto`, `config/kubernetes_pvc.go`, `compute/kubernetes/backend.go`, `compute/kubernetes/resources/{job,pvc}.go`, `config/kubernetes/{worker-job,executor-job,worker-pvc}.yaml`, `worker/{kubernetes,worker}.go`, `cmd/worker/run.go` | `config/kubernetes_pvc_test.go`, `compute/kubernetes/pvc_mode_test.go`, `worker/kubernetes_pvc_test.go` | Ready. `full` keeps upstream behaviour (default). |
 | **HTSGET storage** (`htsget://{reads\|variants}/…`) | `storage/htsget.go`, `storage/htsget/`, `config/config.proto` (`HTSGETStorage`) | `storage/htsget_test.go` | Needs the token-in-URL question settled (see below). |
 | **SDA storage** (`sda://dataset/path`) | `storage/sda.go`, `config/config.proto` (`SDAStorage`) | – | Needs tests + token-in-URL question settled. |
@@ -21,7 +22,7 @@ GDI-only (not meant for upstream):
 
 - `Dockerfile.dind` – image with Docker CLI for the local/manual worker with the Docker executor.
 - `.github/workflows/git-tag.yaml` – publishes `ghcr.io/<repo>:<tag>` on git tags / manual dispatch; `workflow_dispatch` on CI workflows.
-- `deploy-guide/kubernetes/` + `DEPLOYMENT.md` – namespaced-only Helm chart (`PVCMode: shared`), no ClusterRole needed.
+- `deploy-guide/kubernetes/` + `DEPLOYMENT.md` – Helm chart with `pvcMode` shared (default) / pvc / full; namespaced RBAC only except for `full`.
 - Docs: `website/content/docs/storage/{htsget,sda}.md`, PVC modes section in `website/content/docs/compute/kubernetes.md`.
 
 ## Keeping in sync with upstream

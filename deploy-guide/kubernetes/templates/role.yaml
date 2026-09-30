@@ -25,8 +25,8 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["get", "list", "watch"]
-  # Only exercised if you provision a PersistentVolumeClaim per task
-  # instead of sharing one PVC across all tasks.
+  # pvcMode "pvc"/"full": the server creates a PVC per task and removes it
+  # (finalizer + delete) once the task finishes.
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]

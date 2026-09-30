@@ -167,3 +167,52 @@ func TestSubmit_PVCModeFullRequiresS3(t *testing.T) {
 		}
 	}
 }
+
+// TestNamespacedRBAC_NoClusterOrSACalls verifies that, with a static
+// (Helm-managed) ServiceAccount and PVCMode "shared"/"pvc", neither task
+// cleanup nor orphan cleanup touches PersistentVolumes or ServiceAccounts, so
+// a deployment with namespaced RBAC only (no ClusterRole, no serviceaccounts
+// permissions) runs without Forbidden errors.
+func TestNamespacedRBAC_NoClusterOrSACalls(t *testing.T) {
+	for _, mode := range []string{config.PVCModePVC, config.PVCModeShared} {
+		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			client := fake.NewSimpleClientset()
+			var forbidden []string
+			client.PrependReactor("*", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				res := action.GetResource().Resource
+				if res == "persistentvolumes" || res == "serviceaccounts" {
+					forbidden = append(forbidden, action.GetVerb()+" "+res)
+					return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: res}, "", nil)
+				}
+				return false, nil, nil
+			})
+
+			conf := pvcModeTestConfig(t, mode)
+			b := &Backend{
+				client:   client,
+				event:    &noopEventWriter{},
+				database: &mockDatabase{tasks: map[string]*tes.Task{}},
+				log:      logger.NewLogger("test", logger.DefaultConfig()),
+				conf:     conf,
+			}
+
+			task := &tes.Task{
+				Id:        "task1",
+				Inputs:    []*tes.Input{{Url: "sda://dataset/file", Path: "/data/file"}},
+				Executors: []*tes.Executor{{Image: "alpine", Command: []string{"echo"}}},
+			}
+			if err := b.Submit(ctx, task, conf); err != nil {
+				t.Fatalf("Submit: %v", err)
+			}
+			if err := b.cleanResources(ctx, task.Id); err != nil {
+				t.Errorf("cleanResources: %v", err)
+			}
+			b.CleanOrphanedResources(ctx)
+
+			if len(forbidden) > 0 {
+				t.Errorf("unexpected calls requiring extra RBAC: %v", forbidden)
+			}
+		})
+	}
+}

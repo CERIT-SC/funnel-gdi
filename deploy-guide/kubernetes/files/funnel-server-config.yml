@@ -1,3 +1,8 @@
+{{- include "funnel.validate" . -}}
+# Funnel server config. Funnel parses its config strictly: unknown keys or
+# wrongly-typed values (e.g. a number where a string is expected) stop the
+# server at startup. Durations are in seconds ("300s"), timeouts are
+# objects ("Timeout: {duration: 30s}").
 Database: boltdb
 
 BoltDB:
@@ -7,10 +12,6 @@ Compute: {{ .Values.compute }}
 
 Logger:
   Level: debug
-
-# LocalStorage:
-#   AllowedDirs:
-#     - /opt/funnel/funnel-work-dir/results
 
 # GA4GH inputs: htsget://{reads|variants}/... and sda://dataset/path.
 # A backend is enabled only when its ServiceURL is set (see values.yaml).
@@ -31,6 +32,8 @@ GenericS3:
     Endpoint: {{ .Values.s3.endpoint | quote }}
     Key: {{ .Values.s3.key | quote }}
     Secret: {{ .Values.s3.secret | quote }}
+    Bucket: {{ .Values.s3.bucket | quote }}
+    Region: {{ .Values.s3.region | quote }}
 
 AmazonS3:
   Disabled: true
@@ -46,10 +49,8 @@ Server:
     # (Basic authentication):
     ClientId: {{ .Values.oidc.clientid | quote }}
     ClientSecret: {{ .Values.oidc.clientsecret | quote }}
-    # Optional: if specified, this scope value must be in the token:
-    # RequireScope:
-    # Optional: if specified, this audience value must be in the token:
     {{- if .Values.oidc.audience }}
+    # This audience value must be in the token:
     RequireAudience: {{ .Values.oidc.audience | quote }}
     {{- end }}
     RedirectURL: {{ .Values.oidc.redirecturl | quote }}
@@ -58,9 +59,10 @@ Server:
     - User: {{ .Values.basicauth.user | quote }}
       Password: {{ .Values.basicauth.password | quote }}
       Admin: true
-  
   HostName: 0.0.0.0
-  
+  HTTPPort: "8000"
+  RPCPort: "9090"
+
 RPCClient:
   Credential:
     User: {{ .Values.basicauth.user | quote }}
@@ -72,21 +74,43 @@ Kubernetes:
   DisableReconciler: false
   ReconcileRate: 300s
   Namespace: {{ .Release.Namespace }}
-  # All tasks share the chart's single PVC (templates/pvc.yaml), isolated
-  # by subPath, so no per-task PV/PVC (and no ClusterRole) is needed.
-  PVCMode: shared
-  SharedPVCName: {{ .Values.pvc.name }}
+  JobsNamespace: {{ .Release.Namespace }}
+  # Per-task storage (see pvcMode in values.yaml). Must match the worker config.
+  PVCMode: {{ .Values.pvcMode | quote }}
+  SharedPVCName: {{ .Values.pvc.name | quote }}
+{{- if eq .Values.pvcMode "pvc" }}
+  StorageClassName: {{ .Values.storageClassName | default .Values.pvc.storageClass | quote }}
+{{- end }}
+{{- if ne .Values.pvcMode "shared" }}
+  # Per-task PVC (pvcMode "pvc"/"full"), see files/worker-pvc.yaml.
+  PVCTemplate: |
+{{ .Files.Get "files/worker-pvc.yaml" | indent 4 }}
+{{- end }}
+{{- if eq .Values.pvcMode "full" }}
+  # Per-task S3 CSI-backed PV (pvcMode "full"), see files/worker-pv.yaml.
+  PVTemplate: |
+{{ .Files.Get "files/worker-pv.yaml" | indent 4 }}
+{{- end }}
+  # Worker Job, one per task. The "app: funnel-worker" label is required:
+  # the server's reconciler and cleanup find worker Jobs by it.
   WorkerTemplate: |
     apiVersion: batch/v1
     kind: Job
     metadata:
       ## DO NOT CHANGE NAME
-      name: {{ print "{{.TaskId}}" }}
-      namespace: {{ print "{{.JobsNamespace}}" }}
-    spec: 
+      name: {{`{{.TaskId}}`}}
+      namespace: {{`{{.JobsNamespace}}`}}
+      labels:
+        app: funnel-worker
+        task-id: {{`{{.TaskId}}`}}
+    spec:
       backoffLimit: 0
       completions: 1
       template:
+        metadata:
+          labels:
+            app: funnel-worker
+            task-id: {{`{{.TaskId}}`}}
         spec:
           serviceAccountName: {{ .Values.funnel.serviceAccount }}
 {{- if .Values.imagePullSecret }}
@@ -95,12 +119,12 @@ Kubernetes:
 {{- end }}
           restartPolicy: Never
           securityContext:
-            runAsUser: 1000
+            runAsUser: {{ .Values.funnel.runAsUser }}
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
-          containers: 
-            - name: funnel-worker-{{ print "{{.TaskId}}" }}
+          containers:
+            - name: funnel-worker-{{`{{.TaskId}}`}}
               image: {{ .Values.image }}
               imagePullPolicy: Always
               args:
@@ -109,12 +133,19 @@ Kubernetes:
                 - "--config"
                 - "/etc/config/funnel-worker-config.yml"
                 - "--taskID"
-                - {{ print "{{.TaskId}}" }}
+                - {{`{{.TaskId}}`}}
+              env:
+                # Crypt4GH key pair used to decrypt sda:// and htsget://
+                # inputs; generated on first use into the /keys emptyDir.
+                - name: C4GH_SECRET_KEY
+                  value: /keys/key
+                - name: C4GH_PUBLIC_KEY
+                  value: /keys/key.pub
               resources:
                 requests:
-                  cpu: {{ print "{{if ne .Cpus 0 -}}{{.Cpus}}{{ else }}{{\"100m\"}}{{end}}" }}
-                  memory: {{ print "{{if ne .RamGb 0.0 -}}{{printf \"%.0fG\" .RamGb}}{{else}}{{\"16M\"}}{{end}}" }}
-                  ephemeral-storage: {{ print "{{if ne .DiskGb 0.0 -}}{{printf \"%.0fG\" .DiskGb}}{{else}}{{\"100M\"}}{{end}}" }}
+                  cpu: {{`{{if ne .Cpus 0 -}}{{.Cpus}}{{ else }}{{"100m"}}{{end}}`}}
+                  memory: {{`{{if ne .RamGb 0.0 -}}{{printf "%.0fG" .RamGb}}{{else}}{{"16M"}}{{end}}`}}
+                  ephemeral-storage: {{`{{if ne .DiskGb 0.0 -}}{{printf "%.0fG" .DiskGb}}{{else}}{{"100M"}}{{end}}`}}
                 limits:
                   cpu: 1000m
                   memory: 1G
@@ -124,20 +155,29 @@ Kubernetes:
                   drop:
                     - ALL
               volumeMounts:
-                - name: funnel-storage-{{ print "{{.TaskId}}" }}
-                  mountPath: /opt/funnel/funnel-work-dir/{{ print "{{.TaskId}}" }}
-                  subPath: {{ print "{{.TaskId}}" }}
+                - name: funnel-storage
+                  mountPath: /opt/funnel/funnel-work-dir/{{`{{.TaskId}}`}}
+                  subPath: {{`{{.TaskId}}`}}
                 - name: config-volume
                   mountPath: /etc/config
                 - name: keys
                   mountPath: /keys
-    
-          volumes: 
+          volumes:
             - name: config-volume
               secret:
                 secretName: {{ .Release.Name }}-worker-config
-            - name: funnel-storage-{{ print "{{.TaskId}}" }}
+            - name: funnel-storage
+{{- if eq .Values.pvcMode "shared" }}
               persistentVolumeClaim:
-                claimName: {{ print "{{.PVCName}}" }}
+                claimName: {{`{{.PVCName}}`}}
+{{- else }}
+              # Tasks without inputs/outputs/volumes get no per-task PVC.
+              {{`{{- if .NeedsPVC }}`}}
+              persistentVolumeClaim:
+                claimName: {{`{{.PVCName}}`}}
+              {{`{{- else }}`}}
+              emptyDir: {}
+              {{`{{- end }}`}}
+{{- end }}
             - name: keys
-              emptyDir: {{ print "{}" }}
+              emptyDir: {}

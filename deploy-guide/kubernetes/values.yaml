@@ -1,9 +1,10 @@
 # Default values for the funnel-gdi chart.
 # Every placeholder below (<angle-bracket> values) must be replaced before
-# a real install — see ../DEPLOYMENT.md, Option 2, for the full walkthrough.
+# a real install — see ../../DEPLOYMENT.md, Option 2, for the full walkthrough.
 # Everything else works as-is for a first try on a test namespace.
 
-# Image you built and pushed from the repo root (see DEPLOYMENT.md).
+# Image you built and pushed from the repo root (see DEPLOYMENT.md). Used for
+# the server Deployment and for every per-task worker Job.
 image: <registry>/<registry-user>/funnel-gdi:<tag>
 
 # Name of a `kubernetes.io/dockerconfigjson` Secret (already created in
@@ -33,32 +34,51 @@ funnel:
       memory: 4Gi
       ephemeral-storage: 25Gi
 
+# Resource limits of the per-task executor containers (the task's own image).
+# Requests come from the task's own resources (cpu_cores, ram_gb, disk_gb).
+executor:
+  limits:
+    cpu: 1000m
+    memory: 5G
+
 # Creates the ServiceAccount/Role/RoleBinding this chart needs (see
-# templates/serviceaccount.yaml, role.yaml, rolebinding.yaml). Set to
-# false if your cluster admin creates these for you separately — in that
-# case funnel.serviceAccount above must name whatever they created.
+# templates/serviceaccount.yaml, role.yaml, rolebinding.yaml), plus the
+# ClusterRole/ClusterRoleBinding for PersistentVolumes when pvcMode is "full".
+# Set to false if your cluster admin creates these for you separately — in
+# that case funnel.serviceAccount above must name whatever they created.
 rbac:
   create: true
 
-# Shared storage for task inputs/outputs and the BoltDB task database.
-# Needs ReadWriteMany since both the server and every per-task worker pod
-# mount it at once.
+# Shared PVC mounted by the server (BoltDB task database) and, in pvcMode
+# "shared", by every task. Needs ReadWriteMany since the server and task
+# pods mount it at the same time.
 pvc:
   name: storage
+  # true = use a PVC you created yourself (named pvc.name) instead of
+  # creating one with this chart.
   existing: false
   storageClass: <your-rwx-storage-class>   # e.g. nfs-csi
   size: 2Gi
 
-# Fallback/admin credentials for HTTP Basic Auth (works out of the box)
-# and the internal RPC client (server <-> worker communication, must stay
-# in sync with each other). Change the password before a real deployment.
+# How per-task storage is provisioned (Funnel's Kubernetes.PVCMode):
+#   "shared" (default) - nothing per task; every task mounts pvc.name above,
+#            isolated by subPath. Needs only namespaced RBAC.
+#   "pvc"  - a dedicated PVC per task, dynamically provisioned from
+#            storageClassName (falls back to pvc.storageClass). Needs a
+#            ReadWriteMany StorageClass and only namespaced RBAC.
+#   "full" - upstream behaviour: a PV (S3 Mountpoint CSI driver, uses
+#            s3.bucket/s3.region) + PVC per task. Needs the S3 CSI driver and
+#            a ClusterRole for persistentvolumes, which you usually can't
+#            create yourself on a shared cluster.
+pvcMode: shared
+storageClassName: ""
+
+# Fallback/admin credentials for HTTP Basic Auth (works out of the box).
+# The same credentials are used by the workers to report back to the
+# server over RPC. Change the password before a real deployment.
 basicauth:
   user: admin
   password: <choose-a-strong-password>
-
-rpcclient:
-  user: admin
-  password: <same-as-basicauth.password>
 
 # Optional OIDC login for the web UI / API, layered on top of BasicAuth.
 # Leave disabled to get started; enable once you have an OIDC client
@@ -73,15 +93,19 @@ oidc:
   audience: ""   # optional
 
 # Optional S3-compatible object storage for task inputs/outputs. Leave
-# disabled if tasks only use inline/local inputs.
+# disabled if tasks only use inline/local/GA4GH inputs. bucket/region are
+# only needed for pvcMode "full".
 s3:
   disabled: true
   endpoint: <https://your-s3-endpoint>
   key: <s3-access-key>
   secret: <s3-secret-key>
+  bucket: ""
+  region: ""
 
-# GA4GH input storage (HTSGETStorage / SDAStorage in files/funnel-*-config.yml).
-# Leave serviceurl empty to disable the backend.
+# GA4GH input storage (HTSGETStorage / SDAStorage). Leave serviceurl empty
+# to disable the backend. SDA inputs use the Bearer token of the user who
+# submitted the task (OIDC), so SDA is only useful with oidc.enabled.
 htsget:
   serviceurl: ""   # e.g. https://htsget.your-domain.example/
 sda:

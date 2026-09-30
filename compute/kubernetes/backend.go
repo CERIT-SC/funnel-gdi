@@ -329,9 +329,14 @@ func (b *Backend) cleanResources(ctx context.Context, taskId string) error {
 		}
 	}
 
-	if err := resources.DeleteServiceAccount(ctx, taskId, b.conf.Kubernetes.JobsNamespace, b.client, b.log, saOpts); err != nil {
-		errs = multierror.Append(errs, err)
-		b.log.Error("deleting Worker ServiceAccount", "taskID", taskId, "error", err)
+	// Only delete ServiceAccounts Funnel manages: task-scoped ones created from
+	// ServiceAccountTemplate, or a shared SA named via the _WORKER_SA tag.
+	// Deployments with a static, Helm-managed SA need no serviceaccounts RBAC.
+	if b.conf.Kubernetes.ServiceAccountTemplate != "" || saOpts.SharedSA {
+		if err := resources.DeleteServiceAccount(ctx, taskId, b.conf.Kubernetes.JobsNamespace, b.client, b.log, saOpts); err != nil {
+			errs = multierror.Append(errs, err)
+			b.log.Error("deleting Worker ServiceAccount", "taskID", taskId, "error", err)
+		}
 	}
 
 	// Delete PV. Only PVCModeFull creates (cluster-scoped) PVs; skipping it in
@@ -871,27 +876,33 @@ func (b *Backend) CleanOrphanedResources(ctx context.Context) {
 	// ConfigMaps, PVCs, Roles, and RoleBindings are now owned by the Job via ownerReferences
 	// and are garbage-collected by Kubernetes automatically — they are intentionally excluded here.
 
-	// PVs (cluster-scoped; cannot be owned by a namespaced Job, so must be cleaned explicitly)
-	pvs, err := b.client.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("app=funnel,namespace=%s", namespace)})
-	if err != nil {
-		b.log.Error("CleanOrphanedResources: listing PVs", "error", err)
-	} else {
-		for _, r := range pvs.Items {
-			if id, ok := r.Labels["taskId"]; ok {
-				taskIDs[id] = struct{}{}
+	// PVs (cluster-scoped; cannot be owned by a namespaced Job, so must be cleaned explicitly).
+	// Only PVCModeFull creates PVs, so the other modes need no cluster-wide RBAC.
+	if b.conf.Kubernetes.CreatesPV() {
+		pvs, err := b.client.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("app=funnel,namespace=%s", namespace)})
+		if err != nil {
+			b.log.Error("CleanOrphanedResources: listing PVs", "error", err)
+		} else {
+			for _, r := range pvs.Items {
+				if id, ok := r.Labels["taskId"]; ok {
+					taskIDs[id] = struct{}{}
+				}
 			}
 		}
 	}
 
 	// ServiceAccounts (shared SAs are not owned by a Job; task-scoped SAs may also be orphaned
-	// if they were created before ownerRef support was added)
-	sas, err := b.client.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{LabelSelector: "app=funnel"})
-	if err != nil {
-		b.log.Error("CleanOrphanedResources: listing ServiceAccounts", "error", err)
-	} else {
-		for _, r := range sas.Items {
-			if id, ok := r.Labels["taskId"]; ok {
-				taskIDs[id] = struct{}{}
+	// if they were created before ownerRef support was added). Only relevant when Funnel
+	// creates task-scoped SAs from ServiceAccountTemplate.
+	if b.conf.Kubernetes.ServiceAccountTemplate != "" {
+		sas, err := b.client.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{LabelSelector: "app=funnel"})
+		if err != nil {
+			b.log.Error("CleanOrphanedResources: listing ServiceAccounts", "error", err)
+		} else {
+			for _, r := range sas.Items {
+				if id, ok := r.Labels["taskId"]; ok {
+					taskIDs[id] = struct{}{}
+				}
 			}
 		}
 	}

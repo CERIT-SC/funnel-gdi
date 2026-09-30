@@ -1,3 +1,6 @@
+{{- include "funnel.validate" . -}}
+# Funnel worker config (one worker Job per task). With Database "boltdb" the
+# worker reads the task from, and reports events to, the server over RPC.
 Database: boltdb
 
 Compute: {{ .Values.compute }}
@@ -22,13 +25,11 @@ GenericS3:
     Endpoint: {{ .Values.s3.endpoint | quote }}
     Key: {{ .Values.s3.key | quote }}
     Secret: {{ .Values.s3.secret | quote }}
+    Bucket: {{ .Values.s3.bucket | quote }}
+    Region: {{ .Values.s3.region | quote }}
 
 AmazonS3:
   Disabled: true
-
-# LocalStorage:
-#   AllowedDirs:
-#     - /opt/funnel/funnel-work-dir/results
 
 RPCClient:
   MaxRetries: 3
@@ -42,41 +43,43 @@ EventWriters:
   - rpc
   - log
 
+# Address of the Funnel server (the chart's Service) for RPC.
 Server:
   HostName: {{ .Release.Name }}
   RPCPort: "9090"
 
-
 Kubernetes:
-  # Change to "kubernetes" to use the kubernetes executor
-  Executor: {{ .Values.compute }}
+  Executor: "kubernetes"
   Namespace: {{ .Release.Namespace }}
-  # All tasks share the chart's single PVC (templates/pvc.yaml), isolated
-  # by subPath, so no per-task PV/PVC (and no ClusterRole) is needed.
-  PVCMode: shared
-  SharedPVCName: {{ .Values.pvc.name }}
+  JobsNamespace: {{ .Release.Namespace }}
+  # Must match the server config: decides which PVC the executor mounts.
+  PVCMode: {{ .Values.pvcMode | quote }}
+  SharedPVCName: {{ .Values.pvc.name | quote }}
+  # Executor Job, one per task executor. The "app: funnel-executor" label is
+  # required: orphan cleanup finds executor Jobs by it.
   ExecutorTemplate: |
     apiVersion: batch/v1
     kind: Job
     metadata:
-      name: {{ print "{{.TaskId}}-{{.JobId}}" }}
-      namespace: {{ print "{{.JobsNamespace}}" }}
+      name: {{`{{.TaskId}}-{{.JobId}}`}}
+      namespace: {{`{{.JobsNamespace}}`}}
       labels:
-        job-name: {{ print "{{.TaskId}}-{{.JobId}}" }}
-    spec: 
+        app: funnel-executor
+        job-name: {{`{{.TaskId}}-{{.JobId}}`}}
+    spec:
       backoffLimit: 0
       completions: 1
       template:
         spec:
           restartPolicy: Never
           securityContext:
-            runAsUser: 1000
+            runAsUser: {{ .Values.funnel.runAsUser }}
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
-          containers: 
-          - name: funnel-worker-{{ print "{{.TaskId}}" }}
-            image: {{ print "{{.Image}}" }}
+          containers:
+          - name: funnel-executor-{{`{{.TaskId}}`}}
+            image: {{`{{.Image}}`}}
             imagePullPolicy: Always
             {{`{{- if .UseShell}}`}}
             command: ["/bin/sh", "-c"]
@@ -88,39 +91,52 @@ Kubernetes:
             - {{`{{printf "%q" .}}`}}
             {{`{{- end}}`}}
             {{`{{- end}}`}}
-            workingDir: {{ print "{{.Workdir}}" }}
-            {{`{{if len .Env}}`}}
+            {{`{{- if .Workdir}}`}}
+            workingDir: {{`{{.Workdir}}`}}
+            {{`{{- end}}`}}
+            {{`{{- if .Env}}`}}
             env:
-            {{`{{range $key, $value := .Env}}`}}
+            {{`{{- range $key, $value := .Env}}`}}
             - name: {{`{{$key}}`}}
-              value: "{{`{{$value}}`}}"
-            {{`{{end}}`}}
-            {{`{{end}}`}}
+              value: {{`{{printf "%q" $value}}`}}
+            {{`{{- end}}`}}
+            {{`{{- end}}`}}
             resources:
               requests:
-                cpu: {{ print "{{if ne .Cpus 0 -}}{{.Cpus}}{{ else }}{{\"100m\"}}{{end}}" }}
-                memory: {{ print "{{if ne .RamGb 0.0 -}}{{printf \"%.0fG\" .RamGb}}{{else}}{{\"16M\"}}{{end}}" }}
-                ephemeral-storage: {{ print "{{if ne .DiskGb 0.0 -}}{{printf \"%.0fG\" .DiskGb}}{{else}}{{\"100M\"}}{{end}}" }}
+                cpu: {{`{{if ne .Cpus 0 -}}{{.Cpus}}{{ else }}{{"100m"}}{{end}}`}}
+                memory: {{`{{if ne .RamGb 0.0 -}}{{printf "%.0fG" .RamGb}}{{else}}{{"16M"}}{{end}}`}}
+                ephemeral-storage: {{`{{if ne .DiskGb 0.0 -}}{{printf "%.0fG" .DiskGb}}{{else}}{{"100M"}}{{end}}`}}
               limits:
-                cpu: 1000m
-                memory: 5G
+                {{- toYaml .Values.executor.limits | nindent 16 }}
             securityContext:
               allowPrivilegeEscalation: false
               capabilities:
                 drop:
                   - ALL
             volumeMounts:
+{{- if eq .Values.pvcMode "shared" }}
+            # /shared is a directory shared by all tasks (pvcMode "shared" only).
             - name: storage
               mountPath: /shared
               subPath: shared
-            ### DO NOT CHANGE THIS
-            {{ print "{{range $idx, $item := .Volumes}}" }}
-            - name: storage 
-              mountPath: {{ print "{{$item.ContainerPath}}" }}
-              subPath: {{ print "{{$.TaskId}}{{$item.ContainerPath}}" }}
-            {{ print "{{end}}" }}
-
-          volumes: 
+{{- end }}
+            ### DO NOT CHANGE THIS: task inputs/outputs/volumes
+            {{`{{- if .NeedsPVC }}`}}
+            {{`{{- range $idx, $item := .Volumes}}`}}
+            - name: storage
+              mountPath: {{`{{$item.ContainerPath}}`}}
+              subPath: {{`{{$.TaskId}}{{$item.ContainerPath}}`}}
+            {{`{{- end}}`}}
+            {{`{{- end}}`}}
+          volumes:
+{{- if eq .Values.pvcMode "shared" }}
           - name: storage
             persistentVolumeClaim:
-              claimName: {{ print "{{.PVCName}}" }}
+              claimName: {{`{{.PVCName}}`}}
+{{- else }}
+          {{`{{- if .NeedsPVC }}`}}
+          - name: storage
+            persistentVolumeClaim:
+              claimName: {{`{{.PVCName}}`}}
+          {{`{{- end }}`}}
+{{- end }}
