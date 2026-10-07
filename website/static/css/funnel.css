@@ -273,3 +273,38 @@ details summary {
   cursor: pointer;
   padding-bottom: 0.5em;
 }
+
+/* GDI fork: documented version and version switcher (partials/version-bar.html) */
+.version-bar {
+  background-color: #eef4fb;
+  border-bottom: 1px solid #c8d9ee;
+  font-size: 0.85rem;
+  padding: .4rem .5rem;
+}
+.version-bar-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+.version-bar-date {
+  color: #666;
+}
+.version-switcher select {
+  margin-left: .3rem;
+  font-size: 0.85rem;
+}
+
+/* GDI fork: page notes (partials/page-banner.html) */
+.gdi-banner {
+  border-left: 4px solid #268bd2;
+  background-color: #f3f8fc;
+  padding: .6rem .9rem;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.9rem;
+}
+.gdi-banner-unsupported {
+  border-left-color: #cb4b16;
+  background-color: #fdf4ef;
+}

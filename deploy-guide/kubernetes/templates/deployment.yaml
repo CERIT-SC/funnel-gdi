@@ -11,11 +11,10 @@ spec:
   selector:
     matchLabels:
       app: {{ .Release.Name }}
+  # BoltDB allows one server process only: stop the old pod before the new
+  # one opens the database on the shared PVC.
   strategy:
-    rollingUpdate:
-      maxSurge: 25%
-      maxUnavailable: 25%
-    type: RollingUpdate
+    type: Recreate
   template:
     metadata:
       creationTimestamp: null

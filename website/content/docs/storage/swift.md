@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: OpenStack Swift
 menu:
   main:
@@ -41,7 +42,7 @@ Swift:
   "executors": [{
     "image": "alpine",
     "command": ["cat", "/inputs/hello.txt"],
-    "stdout": "/outputs/hello-out.txt",
+    "stdout": "/outputs/hello-out.txt"
   }]
 }
 ```

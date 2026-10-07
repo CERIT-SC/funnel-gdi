@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: HTCondor
 menu:
   main:

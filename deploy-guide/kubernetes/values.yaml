@@ -3,8 +3,10 @@
 # a real install — see ../../DEPLOYMENT.md, Option 2, for the full walkthrough.
 # Everything else works as-is for a first try on a test namespace.
 
-# Image you built and pushed from the repo root (see DEPLOYMENT.md). Used for
-# the server Deployment and for every per-task worker Job.
+# Image used for the server Deployment and for every per-task worker Job:
+# a release image ghcr.io/cerit-sc/funnel-gdi:<version> (see CHANGELOG-GDI.md;
+# use the version matching appVersion in Chart.yaml), or an image you built
+# and pushed from the repo root (see DEPLOYMENT.md).
 image: <registry>/<registry-user>/funnel-gdi:<tag>
 
 # Name of a `kubernetes.io/dockerconfigjson` Secret (already created in
@@ -35,7 +37,9 @@ funnel:
       ephemeral-storage: 25Gi
 
 # Resource limits of the per-task executor containers (the task's own image).
-# Requests come from the task's own resources (cpu_cores, ram_gb, disk_gb).
+# Requests come from the task's own resources (cpu_cores, ram_gb, disk_gb);
+# a task asking for more than these limits (or more than the worker limits,
+# 1 CPU / 1G, in files/funnel-server-config.yml) cannot be started.
 executor:
   limits:
     cpu: 1000m
@@ -92,9 +96,10 @@ oidc:
   clientsecret: <oidc-client-secret>
   audience: ""   # optional
 
-# Optional S3-compatible object storage for task inputs/outputs. Leave
-# disabled if tasks only use inline/local/GA4GH inputs. bucket/region are
-# only needed for pvcMode "full".
+# S3-compatible object storage for task inputs/outputs. Needed whenever tasks
+# have outputs to keep: file:// outputs do not survive the task on Kubernetes.
+# Leave disabled only if tasks have no outputs and use inline/HTTP/GA4GH
+# inputs. bucket/region are only needed for pvcMode "full".
 s3:
   disabled: true
   endpoint: <https://your-s3-endpoint>

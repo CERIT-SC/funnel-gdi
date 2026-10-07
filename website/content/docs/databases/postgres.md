@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: Postgres
 menu:
   main:

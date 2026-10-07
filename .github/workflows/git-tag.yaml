@@ -15,11 +15,37 @@ on:
 
 jobs:
 
+  # For release tags (X.Y.Z.N, see RELEASING.md) the documentation must name
+  # the released version, otherwise no image or release is published. Other
+  # tags only build an image.
+  docs-version-check:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Check documentation version
+        id: check
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            scripts/check-docs-version.sh "$GITHUB_REF_NAME"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$GITHUB_REF_NAME is not a release tag (X.Y.Z.N), skipping."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Whenever a Git tag is created (in any branch containing this workflow file),
   # this job automatically publishes an image: ghcr.io/<user/repo>:<git-tag>.
   # Currently the image is built for linux/amd64 and linux/arm64.
 
   docker-image-push:
+    needs: docs-version-check
+    # Also runs when docs-version-check is skipped (manual workflow_dispatch).
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -56,3 +82,34 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
+
+  # Publishes a GitHub Release for release tags, with the CHANGELOG section of
+  # that version and links to the documentation at that tag.
+  github-release:
+    needs: [docs-version-check, docker-image-push]
+    if: needs.docs-version-check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          repo_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:$tag"
+          {
+            awk -v h="## [$tag]" 'index($0, h) == 1 { on = 1; next } on && /^(## )?\[/ { exit } on' CHANGELOG-GDI.md
+            echo
+            echo "### Documentation for this version"
+            echo "- [README]($repo_url/blob/$tag/README.md)"
+            echo "- [Deployment guide, system requirements, supported platforms]($repo_url/blob/$tag/DEPLOYMENT.md)"
+            echo
+            echo "### Container image"
+            echo "\`$image\` (linux/amd64, linux/arm64)"
+          } > release-notes.md
+          gh release create "$tag" --title "$tag" --notes-file release-notes.md

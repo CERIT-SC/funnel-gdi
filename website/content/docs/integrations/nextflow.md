@@ -9,7 +9,7 @@ menu:
 
 # Nextflow
 
-[Nextflow](https://nextflow.io/) is a workflow engine with a [rich ecosystem]() of pipelines centered around biological analysis.
+[Nextflow](https://nextflow.io/) is a workflow engine with a [rich ecosystem](https://nf-co.re/) of pipelines centered around biological analysis.
 
 > Nextflow enables scalable and reproducible scientific workflows using software containers. It allows the adaptation of pipelines written in the most common scripting languages.
 
@@ -24,6 +24,8 @@ To set up Nextflow to use Funnel as the TES executor, run the following steps:
 ### 1. Install Nextflow
 
 *Adapted from the [Nextflow Documentation](https://nextflow.io/docs/latest/install.html)*
+
+Nextflow needs Java 17 or newer.
 
 #### a. Install Nextflow:
 
@@ -55,24 +57,33 @@ nextflow info
 
 Add the following to your `nextflow.config` in order to use the GA4GH TES plugin:
 
-```yaml
+```sh
 cat <<EOF >> nextflow.config
 plugins {
   id 'nf-ga4gh'
 }
 
 process.executor = 'tes'
-tes.endpoint = 'http://localhost:8000'   # <--- Funnel's default address 
+tes.endpoint = 'http://localhost:8000'   // Funnel's default address
 EOF
 ```
 
+If the Funnel server requires Basic authentication, also add
+`tes.basicUsername = '<user>'` and `tes.basicPassword = '<password>'`.
+
 ### 3. Start the Funnel Server
 
-Start the Funnel server:
+Start the Funnel server. Nextflow passes the files of its work directory to
+the tasks as local paths, so Funnel's local storage must be allowed to access
+them (the default config only allows the server's working directory, `./`):
 
 ```sh
-funnel server run
+funnel server run --LocalStorage.AllowedDirs $HOME
 ```
+
+Replace `$HOME` with a directory that contains your Nextflow work directory.
+This is the setup tested by the fork's CI (`.github/workflows/nextflow.yaml`,
+with the [nf-canary](https://github.com/seqeralabs/nf-canary) workflow).
  
 ### 4. Run Nextflow
 

@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: AWS Batch
 menu:
   main:

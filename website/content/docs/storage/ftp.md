@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: FTP
 menu:
   main:
@@ -32,7 +33,7 @@ FTPStorage:
   }],
   "executors": [{
     "image": "alpine",
-    "command": ["cat", "/inputs/hello.txt"],
+    "command": ["cat", "/inputs/hello.txt"]
   }]
 }
 ```

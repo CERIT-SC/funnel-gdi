@@ -1,15 +1,23 @@
-baseURL: https://ohsu-comp-bio.github.io/funnel
+baseURL: https://cerit-sc.github.io/funnel-gdi/
 canonifyURLs: true
 languageCode: en-us
-title: Funnel
+title: Funnel GDI
 publishDir: ../docs
 assetDir: assets
 menu:
   main:
-    - name: Reference ↗
+    - name: GDI fork
+      identifier: GDI fork
+      weight: -2000
+    - name: Source code ↗
       parent: Development
-      url: https://godoc.org/github.com/ohsu-comp-bio/funnel
+      url: https://github.com/CERIT-SC/funnel-gdi
       weight: 30
+params:
+  # Root of the published site; versions live in <siteRoot><version>/ and
+  # <siteRoot>versions.json lists them (see website/scripts/build-versions.sh).
+  siteRoot: https://cerit-sc.github.io/funnel-gdi/
+  repoURL: https://github.com/CERIT-SC/funnel-gdi
 security:
   funcs:
     getenv:

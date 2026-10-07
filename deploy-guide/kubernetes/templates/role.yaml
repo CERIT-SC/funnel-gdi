@@ -1,6 +1,6 @@
 {{- if .Values.rbac.create }}
 # Scoped to what the Funnel server and its per-task worker pods actually
-# call through the Kubernetes API (see DEPLOYMENT.md, "How the RBAC works").
+# call through the Kubernetes API (see DEPLOYMENT.md, "Per-task storage modes").
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

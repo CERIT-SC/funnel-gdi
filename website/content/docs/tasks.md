@@ -18,6 +18,7 @@ A task defines a unit of work:
 - logs
 
 The example task below downloads a file named `hello.txt` from S3 and calls `cat hello.txt` using the [alpine][alpine] container. This task also writes the executor's stdout to a file, and uploads the stdout to s3.
+The `#` comments only explain the fields; remove them before sending the task.
 
 ```
 {
@@ -46,9 +47,15 @@ The example task below downloads a file named `hello.txt` from S3 and calls `cat
 ```
 
 Tasks have multiple "executors"; containers and commands run in a sequence. 
-Funnel runs executors via Docker.
+Funnel runs executors via Docker (or as Kubernetes Jobs with the `kubernetes`
+compute backend). With the default Docker command (`Worker.Container.RunCommand`)
+an executor's root filesystem is read-only: it can write only to the paths of
+its inputs, outputs and volumes and to `/tmp`, which is private to each executor (unless the task declares a
+volume at `/tmp`, which is then shared by its executors).
 
-Tasks also have state and logs:
+Tasks also have state and logs (the responses below are shortened; the server
+returns every field of the task, using the `snake_case` field names of the
+TES specification, and empty fields as `""`, `[]`, `{}` or `null`):
 ```
 {
   "id": "b85khc2rl6qkqbhg8vig",
@@ -80,21 +87,26 @@ Tasks also have state and logs:
     {
       "logs": [
         {
-          "startTime": "2017-11-14T11:49:05.127885125-08:00",
-          "endTime": "2017-11-14T11:49:08.484461502-08:00",
+          "start_time": "2017-11-14T11:49:05.127885125-08:00",
+          "end_time": "2017-11-14T11:49:08.484461502-08:00",
+          "exit_code": 0,
           "stdout": "Hello, Funnel!\n"
         }
       ],
-      "startTime": "2017-11-14T11:49:04.433593468-08:00",
-      "endTime": "2017-11-14T11:49:08.487707039-08:00"
+      "start_time": "2017-11-14T11:49:04.433593468-08:00",
+      "end_time": "2017-11-14T11:49:08.487707039-08:00"
     }
   ],
-  "creationTime": "2017-11-14T11:49:04.427163701-08:00"
+  "creation_time": "2017-11-14T11:49:04.427163701-08:00"
 }
 ```
 
 There are logs for each task attempt and each executor. Notice that the stdout is
 conveniently captured by `logs[0].logs[0].stdout`.
+
+The `funnel task get` and `funnel task list` commands print the same data, but
+with `camelCase` field names (`creationTime`, `startTime`, …) and without empty
+fields.
 
 ### Task API
 
@@ -121,18 +133,19 @@ POST /v1/tasks
 }
 
 
-# The response is a task ID:
-b85khc2rl6qkqbhg8vig
+# The response contains the task ID:
+{"id": "b85khc2rl6qkqbhg8vig"}
 ```
 
 ### Get
 ```
 GET /v1/tasks/b85khc2rl6qkqbhg8vig
 
-{"id": "b85khc2rl6qkqbhg8vig", "state": "COMPLETE"}
+{"id": "b85khc2rl6qkqbhg8vig", "state": "COMPLETE", "name": "", "executors": [], ...}
 ```
 
-By default, the minimal task view is returned which describes only the ID and state.
+By default, the minimal task view is returned: only the ID and state are
+filled in, all other fields are empty.
 In order to get the original task with some basic logs, use the "BASIC" task view:
 ```
 GET /v1/tasks/b85khc2rl6qkqbhg8vig?view=BASIC
@@ -142,7 +155,7 @@ GET /v1/tasks/b85khc2rl6qkqbhg8vig?view=BASIC
   "name": "Hello world",
   "inputs": [
     {
-      "url": "gs://funnel-bucket/hello.txt",
+      "url": "s3://funnel-bucket/hello.txt",
       "path": "/inputs/hello.txt"
     }
   ],
@@ -159,26 +172,30 @@ GET /v1/tasks/b85khc2rl6qkqbhg8vig?view=BASIC
         "cat",
         "/inputs/hello.txt"
       ],
-      "stdout": "/outputs/stdout",
+      "stdout": "/outputs/stdout"
     }
   ],
   "logs": [
     {
       "logs": [
         {
-          "startTime": "2017-11-14T11:49:05.127885125-08:00",
-          "endTime": "2017-11-14T11:49:08.484461502-08:00",
+          "start_time": "2017-11-14T11:49:05.127885125-08:00",
+          "end_time": "2017-11-14T11:49:08.484461502-08:00",
+          "exit_code": 0,
+          "stdout": ""
         }
       ],
-      "startTime": "2017-11-14T11:49:04.433593468-08:00",
-      "endTime": "2017-11-14T11:49:08.487707039-08:00"
+      "start_time": "2017-11-14T11:49:04.433593468-08:00",
+      "end_time": "2017-11-14T11:49:08.487707039-08:00",
+      "system_logs": []
     }
   ],
-  "creationTime": "2017-11-14T11:49:04.427163701-08:00"
+  "creation_time": "2017-11-14T11:49:04.427163701-08:00"
 }
 ```
 
-The "BASIC" doesn't include some fields such as stdout/err logs, because these fields may be potentially large.
+The "BASIC" view leaves out the fields that may be large: executor stdout/stderr,
+system logs and the `content` of inputs.
 In order to get everything, use the "FULL" view:
 ```
 GET /v1/tasks/b85khc2rl6qkqbhg8vig?view=FULL
@@ -188,8 +205,14 @@ GET /v1/tasks/b85khc2rl6qkqbhg8vig?view=FULL
   "name": "Hello world",
   "inputs": [
     {
-      "url": "gs://funnel-bucket/hello.txt",
+      "url": "s3://funnel-bucket/hello.txt",
       "path": "/inputs/hello.txt"
+    }
+  ],
+  "outputs": [
+    {
+      "url": "s3://funnel-bucket/output.txt",
+      "path": "/outputs/stdout"
     }
   ],
   "executors": [
@@ -199,23 +222,28 @@ GET /v1/tasks/b85khc2rl6qkqbhg8vig?view=FULL
         "cat",
         "/inputs/hello.txt"
       ],
-      "stdout": "/outputs/stdout",
+      "stdout": "/outputs/stdout"
     }
   ],
   "logs": [
     {
       "logs": [
         {
-          "startTime": "2017-11-14T11:49:05.127885125-08:00",
-          "endTime": "2017-11-14T11:49:08.484461502-08:00",
+          "start_time": "2017-11-14T11:49:05.127885125-08:00",
+          "end_time": "2017-11-14T11:49:08.484461502-08:00",
+          "exit_code": 0,
           "stdout": "Hello, Funnel!\n"
         }
       ],
-      "startTime": "2017-11-14T11:49:04.433593468-08:00",
-      "endTime": "2017-11-14T11:49:08.487707039-08:00"
+      "start_time": "2017-11-14T11:49:04.433593468-08:00",
+      "end_time": "2017-11-14T11:49:08.487707039-08:00",
+      "system_logs": [
+        "level='info' msg='Version' ...",
+        "level='info' msg='Running command' ..."
+      ]
     }
   ],
-  "creationTime": "2017-11-14T11:49:04.427163701-08:00"
+  "creation_time": "2017-11-14T11:49:04.427163701-08:00"
 }
 ```
 
@@ -244,9 +272,11 @@ GET /v1/tasks
 }
 ```
 
-List has the same task views as Get: MINIMAL, BASIC, and FULL.
+List has the same task views as Get: MINIMAL, BASIC, and FULL
+(`GET /v1/tasks?view=BASIC`).
 
-The task list is paginated:
+The task list is paginated (`page_size`, default 256; the next page is
+requested with `page_token`):
 ```
 GET /v1/tasks?page_token=1h123h12j2h3k
 {
@@ -272,7 +302,7 @@ POST /v1/tasks/b85l8tirl6qkqbhg8vj0:cancel
 ### Full task spec
 
 Here's a more detailed description of a task.  
-For a full, in-depth spec, read the TES standard's [task_execution.proto](https://github.com/ga4gh/task-execution-schemas/blob/master/task_execution.proto).
+For a full, in-depth spec, read the TES standard's [OpenAPI specification](https://github.com/ga4gh/task-execution-schemas/blob/develop/openapi/task_execution_service.openapi.yaml).
 
 ```
 {
@@ -281,14 +311,17 @@ For a full, in-depth spec, read the TES standard's [task_execution.proto](https:
     "id": "1234567",
 
     # The task's state. Possible states:
+    #   UNKNOWN
     #   QUEUED
-    #   INITILIZING
+    #   INITIALIZING
     #   RUNNING
     #   PAUSED
     #   COMPLETE
     #   EXECUTOR_ERROR
     #   SYSTEM_ERROR
     #   CANCELED
+    #   PREEMPTED
+    #   CANCELING
     #
     # Output only.
     "state": "QUEUED",
@@ -298,26 +331,26 @@ For a full, in-depth spec, read the TES standard's [task_execution.proto](https:
     "description": "Task description.",
     "tags": {
       "custom-tag-1": "tag-value-1",
-      "custom-tag-2": "tag-value-2",
+      "custom-tag-2": "tag-value-2"
     },
 
     # Resource requests
     "resources": {
       # Number of CPU cores requested.
-      "cpuCores": 1,
+      "cpu_cores": 1,
 
       # RAM request, in gigabytes.
-      "ramGb":    1.0,
+      "ram_gb":    1.0,
 
       # Disk space request, in gigabytes.
-      "diskGb":   100.0,
+      "disk_gb":   100.0,
 
       # Request preemptible machines,
       # e.g. preemptible VM in Google Cloud, an instance from the AWS Spot Market, etc.
       "preemptible": false,
 
-       # Request that the task run in these compute zones.
-       "zones": ["zone1", "zone2"],
+      # Request that the task run in these compute zones.
+      "zones": ["zone1", "zone2"]
     },
 
     # Input files will be downloaded by the worker.
@@ -345,7 +378,7 @@ For a full, in-depth spec, read the TES standard's [task_execution.proto](https:
       # which you want to include without talking directly to the filesystem.
       {
         "path": "/inputs/script.py",
-        "content": "import socket; print socket.gethostname()"
+        "content": "import socket; print(socket.gethostname())"
       }
     ],
 
@@ -367,7 +400,8 @@ For a full, in-depth spec, read the TES standard's [task_execution.proto](https:
     ],
 
     # Executors define a sequence of containers + commands to run.
-    # Execution stop on the first non-zero exit code.
+    # Execution stops on the first non-zero exit code
+    # (unless the executor sets "ignore_error": true).
     "executors": [
       {
         # Container image name.
@@ -393,7 +427,7 @@ For a full, in-depth spec, read the TES standard's [task_execution.proto](https:
         # Environment variables
         "env": {
           "ENV1": "value1",
-          "ENV2": "value2",
+          "ENV2": "value2"
         }
       },
 
@@ -405,12 +439,12 @@ For a full, in-depth spec, read the TES standard's [task_execution.proto](https:
         "stderr": "/container/stderr",
         "workdir": "/tmp"
       }
-    ]
+    ],
 
     # Date/time the task was created.
-    # Set the the server.
+    # Set by the server.
     # Output only.
-    "creationTime": "2017-11-14T11:49:04.427163701-08:00"
+    "creation_time": "2017-11-14T11:49:04.427163701-08:00",
 
     # Task logs.
     # Output only.
@@ -419,75 +453,71 @@ For a full, in-depth spec, read the TES standard's [task_execution.proto](https:
     # so this field is a list of attempts. In most cases, there will be only
     # one or zero entries here.
     "logs": [
+      {
+        # Attempt start/end times, in RFC3339 format.
+        "start_time": "2017-11-14T11:49:04.433593468-08:00",
+        "end_time": "2017-11-14T11:49:08.487707039-08:00",
 
-      # Attempt start/end times, in RFC3339 format.
-      "startTime": "2017-11-14T11:49:04.433593468-08:00",
-      "endTime": "2017-11-14T11:49:08.487707039-08:00"
-
-      # Arbitrary metadata set by Funnel.
-      "metadata": {
-        "hostname": "worker-1",
-      },
-
-      # Arbitrary system logs which Funnel thinks are useful to the user.
-      "systemLogs": [
-        "task was assigned to worker 1",
-        "docker command: docker run -v /vol:/data alpine cmd arg1 arg2",
-      ],
-
-      # Log of files uploaded to storage by the worker,
-      # including all files in directories, with file sizes.
-      "outputs": [
-        {
-          "url": "s3://my-bucket/output-data/results.txt",
-          "path": "/outputs/results.txt",
-          "sizeBytes": 123
+        # Arbitrary metadata set by Funnel.
+        "metadata": {
+          "hostname": "worker-1"
         },
-        {
-          "url": "s3://my-bucket/output-data/output-dir/file1.txt",
-          "path": "/outputs/data-dir/file1.txt",
-          "sizeBytes": 123
-        },
-        {
-          "url": "s3://my-bucket/output-data/output-dir/file2.txt",
-          "path": "/outputs/data-dir/file2.txt",
-          "sizeBytes": 123
-        }
-        {
-          "url": "s3://my-bucket/output-data/output-dir/subdir/file3.txt",
-          "path": "/outputs/data-dir/subdir/file3.txt",
-          "sizeBytes": 123
-        }
-      ],
 
-      # Executor logs. One entry per executor.
-      "logs": [
-        {
-          # Executor start/end time, in RFC3339 format.
-          "startTime": "2017-11-14T11:49:05.127885125-08:00",
-          "endTime": "2017-11-14T11:49:08.484461502-08:00",
+        # Arbitrary system logs which Funnel thinks are useful to the user.
+        # Only available in the FULL task view.
+        "system_logs": [
+          "level='info' msg='Running command' ... cmd='docker run ... alpine cmd arg1 arg2'"
+        ],
 
-          # Executor stdout/err. Only available in the FULL task view.
-          #
-          # There is a size limit for these fields, which is configurable
-          # and defaults to 10KB. If more than 10KB is generated, only the
-          # tail will be logged. If the full output is needed, the task
-          # may use Executor.stdout and an output to upload the full content
-          # to storage.
-          "stdout": "Hello, Funnel!",
-          "stderr": "",
+        # Log of files uploaded to storage by the worker,
+        # including all files in directories, with file sizes.
+        "outputs": [
+          {
+            "url": "s3://my-bucket/output-data/results.txt",
+            "path": "/outputs/results.txt",
+            "size_bytes": "123"
+          },
+          {
+            "url": "s3://my-bucket/output-data/output-dir/file1.txt",
+            "path": "/outputs/data-dir/file1.txt",
+            "size_bytes": "123"
+          },
+          {
+            "url": "s3://my-bucket/output-data/output-dir/subdir/file3.txt",
+            "path": "/outputs/data-dir/subdir/file3.txt",
+            "size_bytes": "123"
+          }
+        ],
 
-          # Exit code
-          "exit_code": 0,
-        },
-        {
-          "startTime": "2017-11-14T11:49:05.127885125-08:00",
-          "endTime": "2017-11-14T11:49:08.484461502-08:00",
-          "stdout": "Hello, Funnel!\n"
-        }
-      ],
-    }
-  ],
+        # Executor logs. One entry per executor.
+        "logs": [
+          {
+            # Executor start/end time, in RFC3339 format.
+            "start_time": "2017-11-14T11:49:05.127885125-08:00",
+            "end_time": "2017-11-14T11:49:08.484461502-08:00",
+
+            # Executor stdout/err. Only available in the FULL task view.
+            #
+            # There is a size limit for these fields, which is configurable
+            # (Worker.LogTailSize) and defaults to 10 KB. If more than 10 KB
+            # is generated, only the tail will be logged. If the full output
+            # is needed, the task may use Executor.stdout and an output to
+            # upload the full content to storage.
+            "stdout": "Hello, Funnel!",
+            "stderr": "",
+
+            # Exit code
+            "exit_code": 0
+          },
+          {
+            "start_time": "2017-11-14T11:49:05.127885125-08:00",
+            "end_time": "2017-11-14T11:49:08.484461502-08:00",
+            "stdout": "Hello, Funnel!\n",
+            "exit_code": 0
+          }
+        ]
+      }
+    ]
 }
 ```
 

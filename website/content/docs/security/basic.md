@@ -32,11 +32,13 @@ The `TaskAccess` property configures the visibility and access-mode for tasks:
 
 As new tasks are created, the username behind the request is recorded as the
 owner of the task. Depending on the `TaskAccess` property, if owner-based
-acces-mode is enabled, the owner of the task is compared to username of current
+access-mode is enabled, the owner of the task is compared to username of current
 request to decide if the user may see and interact with the task.
 
 If you are using BoltDB or Badger, the Funnel worker communicates to the server via gRPC
-so you will also need to configure the RPC client.
+so you will also need to configure the RPC client. This also applies to the
+`local` compute backend: without these credentials the worker cannot read the
+task, and the task stays `QUEUED`.
 
 ```yaml
 RPCClient:

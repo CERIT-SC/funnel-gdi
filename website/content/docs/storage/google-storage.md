@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: Google Storage
 menu:
   main:
@@ -17,7 +18,7 @@ may explicitly set the credentials in the worker config:
 GoogleStorage:
   Disabled: false
   # Path to account credentials file.
-  AccountFile: ""
+  CredentialsFile: ""
 ```
 
 ### Example task
@@ -35,7 +36,7 @@ GoogleStorage:
   "executors": [{
     "image": "alpine",
     "command": ["cat", "/inputs/hello.txt"],
-    "stdout": "/outputs/hello-out.txt",
+    "stdout": "/outputs/hello-out.txt"
   }]
 }
 ```

@@ -2,8 +2,9 @@
 {{ partial "head.html" . }}
 
 <div class="homepage-lead"><div class="homepage-lead-container">
-  <p>Funnel is a toolkit for distributed task execution with a simple API.</p>
-  <a href="{{ .Site.BaseURL }}download" class="download-button">Download</a>
+  <p>Funnel GDI is the GDI fork of Funnel, a toolkit for distributed task execution with a simple API.</p>
+  <a href="{{ .Site.BaseURL }}gdi/deployment/" class="download-button">Deploy</a>
+  <a href="{{ .Site.BaseURL }}gdi/" class="docs-button">About the GDI fork</a>
   <a href="#intro" class="docs-button">Get Started</a>
 </div></div>
 
@@ -29,13 +30,15 @@
            and logs.</p>
         <p>A worker will download input files, run a sequence of Docker
            containers, upload output files, and emits events and logs along the way.</p>
-        <h3>Cross platform</h3>
-        <p>We use Funnel on AWS, Google Cloud, OpenStack, and the good ol' university HPC cluster.</p>
+        <h3>Built for GDI</h3>
+        <p>The GDI fork adds per-task storage modes on Kubernetes, HTSGET and SDA inputs with
+           Crypt4GH, and audit logging. See <a href="{{ .Site.BaseURL }}gdi/features/">GDI features</a>.</p>
       </div>
 
       <div class="col span_4_of_12">
         <h3>Adaptable</h3>
-        <p>A wide variety of options make Funnel easily adaptable:
+        <p>Upstream Funnel offers many backends. The GDI fork supports and tests a subset of them,
+           listed in <a href="{{ .Site.BaseURL }}gdi/deployment/#supported-and-tested-platforms">Supported and tested platforms</a>:
           <ul>
             <li>BoltDB</li>
             <li>Elasticsearch</li>
@@ -276,19 +279,19 @@ rpcAddress           :9090
     <div class="section group">
 
       <div class="col span_4_of_12">
-        <h3>Drop in for a chat.</h3>
-        <p>Join the <a href="https://gitter.im/ohsu-comp-bio/funnel">Gitter channel</a>.</p>
+        <h3>Read the changes.</h3>
+        <p>See the <a href="{{ .Site.BaseURL }}gdi/changelog/">changelog</a> of each GDI release.</p>
       </div>
 
       <div class="col span_4_of_12">
         <h3>Get the code.</h3>
-        <p>Head over to <a href="https://github.com/ohsu-comp-bio/funnel">GitHub</a> and dig in.</p>
+        <p>Head over to <a href="{{ .Site.Params.repoURL }}">GitHub</a> and dig in.</p>
       </div>
 
       <div class="col span_4_of_12">
         <h3>Give feedback.</h3>
         <p>
-           <a href="https://github.com/ohsu-comp-bio/funnel/issues">Let us know</a> what you think.</p>
+           <a href="{{ .Site.Params.repoURL }}/issues">Let us know</a> what you think.</p>
       </div>
 
     </div>

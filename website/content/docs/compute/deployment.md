@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: Deploying a cluster
 menu:
   main:
@@ -43,10 +44,12 @@ Scheduler:
   ScheduleChunk: 10
 
   # How long to wait between updates before marking a node dead.
-  NodePingTimeout: 1m
+  NodePingTimeout:
+    duration: 60s
 
   # How long to wait for a node to start, before marking the node dead.
-  NodeInitTimeout: 5m
+  NodeInitTimeout:
+    duration: 300s
 
 
 Node:
@@ -54,8 +57,10 @@ Node:
   ID: ""
 
   # If the node has been idle for longer than the timeout, it will shut down.
-  # -1 means there is no timeout. 0 means timeout immediately after the first task.
-  Timeout: -1s
+  # "disabled: true" means there is no timeout. "duration: 0s" means timeout
+  # immediately after the first task.
+  Timeout:
+    disabled: true
 
   # A Node will automatically try to detect what resources are available to it. 
   # Defining Resources in the Node configuration overrides this behavior.

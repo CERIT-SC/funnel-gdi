@@ -24,6 +24,8 @@ GDI-only (not meant for upstream):
 - `.github/workflows/git-tag.yaml` – publishes `ghcr.io/<repo>:<tag>` on git tags / manual dispatch; `workflow_dispatch` on CI workflows.
 - `deploy-guide/kubernetes/` + `DEPLOYMENT.md` – Helm chart with `pvcMode` shared (default) / pvc / full; namespaced RBAC only except for `full`.
 - Docs: `website/content/docs/storage/{htsget,sda}.md`, PVC modes section in `website/content/docs/compute/kubernetes.md`.
+- Documentation website (https://cerit-sc.github.io/funnel-gdi/, one copy per release + `latest/` + `dev/`): `.github/workflows/pages.yaml`, `website/scripts/` (`sync-gdi-docs.py` generates the "GDI fork" pages from the root documents, `build-versions.sh`, `check-links.py`), `website/content/gdi.md`, `website/content/download.md`, `website/layouts/partials/{version-bar,page-banner}.html`, `website/layouts/shortcodes/gdi-version.html`, `website/go.mod` (pinned Hugo modules), GDI header/home page in `website/layouts/`, `website/config.yaml` (`baseURL`, menu, `params`), `gdi` / `gdi_support` front matter on upstream pages.
+- Release and documentation process: `CHANGELOG-GDI.md`, `RELEASING.md` (release policy and checklist), `scripts/dashboard-smoke-test.mjs` (browser test of the web dashboard), `scripts/check-docs-version.sh` (run by `git-tag.yaml` for `X.Y.Z.N` tags, which also creates the GitHub Release), `.github/workflows/docs.yaml` (CHANGELOG check and website build + link check on PRs to `master-gdi`), `.github/pull_request_template.md`. `CHANGELOG.md` stays the upstream changelog.
 
 ## Keeping in sync with upstream
 
