@@ -3,6 +3,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ import (
 // and logging.
 type DefaultWorker struct {
 	Executor    Executor
-	Conf        config.Worker
+	Conf        *config.Worker
 	Store       storage.Storage
 	TaskReader  TaskReader
 	EventWriter events.Writer
@@ -38,10 +39,24 @@ type Executor struct {
 	PVTemplate string
 	// Kubernetes persistent volume claim template
 	PVCTemplate string
-	// Kubernetes namespace
+	// Funnel Server namespace
 	Namespace string
+	// Funnel Worker + Executor namespace
+	JobsNamespace string
 	// Kubernetes service account name
 	ServiceAccount string
+	// Kubernetes service account template
+	ServiceAccountTemplate string
+	// Kubernetes role template
+	RoleTemplate string
+	// Kubernetes role binding template
+	RoleBindingTemplate string
+	// NodeSelector for scheduling jobs onto specific nodes
+	NodeSelector map[string]string
+	// Tolerations for scheduling jobs onto specific nodes
+	Tolerations []map[string]interface{}
+	// Resources specifies the default resource requirements for Kubernetes jobs.
+	Resources *config.KubernetesResources
 	// PVCMode mirrors config.Kubernetes.PVCMode ("full", "pvc", or "shared")
 	PVCMode string
 	// SharedPVCName mirrors config.Kubernetes.SharedPVCName
@@ -152,7 +167,7 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 
 	// Download inputs
 	if run.ok() {
-		run.syserr = DownloadInputs(ctx, mapper.Inputs, r.Store, event, r.Conf.MaxParallelTransfers)
+		run.syserr = DownloadInputs(ctx, mapper.Inputs, r.Store, event, int(r.Conf.MaxParallelTransfers))
 	}
 
 	if run.ok() {
@@ -185,8 +200,15 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 			resources = &tes.Resources{}
 		}
 
-		ignoreError := false
 		for i, d := range task.GetExecutors() {
+			// If a previous executor failed and its error was not to be ignored,
+			// stop before creating any state (executor writer, log slot, etc.) for
+			// this executor. Creating the writer above would otherwise emit an empty
+			// executor log entry for an executor that never ran.
+			if !run.ok() {
+				break
+			}
+
 			var command = Command{
 				Image:        d.Image,
 				ShellCommand: d.Command,
@@ -199,17 +221,47 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 			var taskCommand TaskCommand
 
 			if r.Executor.Backend == "kubernetes" {
-				taskCommand = &KubernetesCommand{
-					TaskId:        task.Id,
-					JobId:         i,
-					StdinFile:     d.Stdin,
-					TaskTemplate:  r.Executor.Template,
-					Namespace:     r.Executor.Namespace,
-					Resources:     resources,
-					Command:       command,
-					PVCMode:       r.Executor.PVCMode,
-					SharedPVCName: r.Executor.SharedPVCName,
+				resources, err := config.ValidateResources(resources, r.Executor.Resources)
+				if err != nil {
+					return err
 				}
+
+				// Store the effective resources back to the task
+				task.Resources = resources
+
+				resourceLimits := config.GetResourceLimits(r.Executor.Resources)
+
+				err = r.EventWriter.WriteEvent(pctx, events.NewResources(task.Id, task.Resources))
+				if err != nil {
+					// TODO: Handle this error properly...
+					// return fmt.Errorf("error writing resources event for task %s: %v", task.Id, err)
+				}
+
+				taskCommand = &KubernetesCommand{
+					TaskId:         task.Id,
+					JobId:          i,
+					StdinFile:      d.Stdin,
+					StdoutFile:     d.Stdout,
+					StderrFile:     d.Stderr,
+					TaskTemplate:   r.Executor.Template,
+					Namespace:      r.Executor.Namespace,
+					JobsNamespace:  r.Executor.JobsNamespace,
+					Resources:      resources,
+					ResourceLimits: resourceLimits,
+					Command:        command,
+					NeedsPVC:       len(task.GetInputs()) > 0 || len(task.GetOutputs()) > 0 || len(task.GetVolumes()) > 0,
+					PVCMode:        r.Executor.PVCMode,
+					SharedPVCName:  r.Executor.SharedPVCName,
+					NodeSelector:   r.Executor.NodeSelector,
+					Tolerations:    r.Executor.Tolerations,
+					ServiceAccount: fmt.Sprintf("funnel-worker-sa-%s-%s", r.Executor.JobsNamespace, task.Id),
+				}
+
+				// Override ServiceAccountName if provided in Task Tags
+				if saName, exists := task.Tags["_WORKER_SA"]; exists && saName != "" {
+					taskCommand.(*KubernetesCommand).ServiceAccount = saName
+				}
+
 			} else {
 				taskCommand = &DockerCommand{
 					Volumes: mapper.Volumes,
@@ -222,10 +274,11 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 					RunCommand:      r.Conf.Container.RunCommand,
 					PullCommand:     r.Conf.Container.PullCommand,
 					StopCommand:     r.Conf.Container.StopCommand,
+					Resources:       resources,
 					Command:         command,
 				}
 
-				// Hide this behind explicit flag/option in configuration
+				// TODO: Hide this behind explicit flag/option in configuration
 				// if r.Conf.Container.EnableTags {
 				// 	for k, v := range task.Tags {
 				// 		safeTag := r.sanitizeValues(v)
@@ -241,38 +294,78 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 			}
 
 			// Opens stdin/out/err files and updates those fields on "cmd".
-			if run.ok() || ignoreError {
+			// Skip for Kubernetes: the executor runs in a separate pod and writes
+			// stdout/stderr directly via its PVC mount. Creating host files here
+			// would poison the Mountpoint inode, making the file unreadable by
+			// the worker's mount instance (EPERM).
+			if r.Executor.Backend != "kubernetes" {
 				run.syserr = r.openStepLogs(mapper, s, d)
 			}
 
-			if run.ok() || ignoreError {
-				run.execerr = s.Run(ctx)
-			}
+			if run.ok() {
+				err := s.Run(ctx)
 
-			ignoreError = d.GetIgnoreError()
+				if err != nil {
+					// Check if it's a Kubernetes system error
+					// TODO: Change this to check the exit code
+					var k8sSystemErr *K8sSystemErr
+					var execErr *K8sExecutorErr
+
+					switch {
+					// K8s System error
+					case errors.As(err, &k8sSystemErr):
+						run.syserr = err
+					// K8s Executor error
+					case errors.As(err, &execErr):
+						run.execerr = err
+					// Local (Docker) Executor error
+					default:
+						run.execerr = err
+					}
+
+					// If this executor declared that its errors should be ignored,
+					// clear the executor error so subsequent executors still run.
+					// System errors are never ignored.
+					if run.execerr != nil && d.GetIgnoreError() {
+						run.execerr = nil
+					}
+				}
+			}
 		}
 	}
 
 	// Try to fix symlinks broken by docker filesystems.
-	if run.ok() {
+	if run.syserr == nil {
 		for _, output := range mapper.Outputs {
 			fixLinks(mapper, output.Path)
 		}
 	}
 
-	if run.ok() {
+	if run.syserr == nil {
 		// Resolve wildcards in the output paths
 		resolveWildcards(mapper)
 	}
 
-	if run.ok() && r.Conf.ScratchPath != "" {
+	if run.syserr == nil && r.Conf.ScratchPath != "" {
 		mapper.CopyOutputsToWorkDir(r.Conf.ScratchPath)
 	}
 
-	// Upload outputs
+	// Upload outputs regardless of executor error — the user needs the output
+	// files (logs, stderr, etc.) to diagnose failures. Only skip on system errors
+	// where the worker itself is in a bad state.
 	var outputLog []*tes.OutputFileLog
-	if run.ok() {
-		outputLog, run.syserr = UploadOutputs(ctx, mapper.Outputs, r.Store, event, r.Conf.MaxParallelTransfers)
+	if run.syserr == nil {
+		var uploadErr error
+		outputLog, uploadErr = UploadOutputs(ctx, mapper.Outputs, r.Store, event, int(r.Conf.MaxParallelTransfers))
+		if uploadErr != nil {
+			if run.execerr != nil {
+				// The executor already failed; treat upload errors as warnings so the
+				// task is reported as EXECUTOR_ERROR rather than SYSTEM_ERROR.
+				event.Error("Failed to upload outputs after executor error", "error", uploadErr)
+			} else {
+				run.syserr = uploadErr
+			}
+		}
 	}
 
 	// unmap paths for OutputFileLog
@@ -365,7 +458,7 @@ func (r *DefaultWorker) pollForCancel(pctx context.Context, cancelCallback func(
 	// Start a goroutine that polls the server to watch for a canceled state.
 	// If a cancel state is found, "taskctx" is canceled.
 	go func() {
-		ticker := time.NewTicker(time.Duration(r.Conf.PollingRate))
+		ticker := time.NewTicker(r.Conf.PollingRate.AsDuration())
 		defer ticker.Stop()
 
 		for {

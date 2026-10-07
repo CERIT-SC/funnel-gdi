@@ -11,7 +11,7 @@ func TestHTSGET(t *testing.T) {
 	invalidUrl := "https://example.org"
 	validUrls := []string{"htsget://reads/file", "htsget://variants/file"}
 
-	store, err := NewHTSGET(config.HTSGETStorage{})
+	store, err := NewHTSGET(&config.HTSGETStorage{})
 	if err != nil {
 		t.Fatal("Unexpected error while creating an HTSGET backend:", err)
 	}

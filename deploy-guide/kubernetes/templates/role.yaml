@@ -20,8 +20,13 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # Only exercised if you provision a PersistentVolumeClaim per task
-  # instead of sharing one PVC across all tasks.
+  # The server reads pod warning events to report why a task failed to
+  # start (e.g. image pull or container config errors).
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  # pvcMode "pvc"/"full": the server creates a PVC per task and removes it
+  # (finalizer + delete) once the task finishes.
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]

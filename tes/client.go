@@ -2,6 +2,7 @@ package tes
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -63,7 +64,7 @@ func (c *Client) GetTask(ctx context.Context, req *GetTaskRequest) (*Task, error
 	// Send request
 	u := c.address + "/v1/tasks/" + req.Id + "?view=" + req.View
 	hreq, _ := http.NewRequest("GET", u, nil)
-	hreq.WithContext(ctx)
+	hreq = hreq.WithContext(ctx)
 	c.setCredentials(hreq)
 	body, err := util.CheckHTTPResponse(c.client.Do(hreq))
 	if err != nil {
@@ -99,7 +100,7 @@ func (c *Client) ListTasks(ctx context.Context, req *ListTasksRequest) (*ListTas
 	// Send request
 	u := c.address + "/v1/tasks?" + v.Encode()
 	hreq, _ := http.NewRequest("GET", u, nil)
-	hreq.WithContext(ctx)
+	hreq = hreq.WithContext(ctx)
 	c.setCredentials(hreq)
 	body, err := util.CheckHTTPResponse(c.client.Do(hreq))
 	if err != nil {
@@ -129,7 +130,7 @@ func (c *Client) CreateTask(ctx context.Context, task *Task) (*CreateTaskRespons
 	// Send request
 	u := c.address + "/v1/tasks"
 	hreq, _ := http.NewRequest("POST", u, bytes.NewReader(b))
-	// hreq.WithContext(ctx)
+	hreq = hreq.WithContext(ctx)
 	hreq.Header.Add("Content-Type", "application/json")
 	c.setCredentials(hreq)
 	body, err := util.CheckHTTPResponse(c.client.Do(hreq))
@@ -148,30 +149,72 @@ func (c *Client) CreateTask(ctx context.Context, task *Task) (*CreateTaskRespons
 
 // CancelTask POSTs to /v1/tasks/{id}:cancel
 func (c *Client) CancelTask(ctx context.Context, req *CancelTaskRequest) (*CancelTaskResponse, error) {
+	result, err := c.CancelTaskWithMessage(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return result.Response, nil
+}
+
+// CancelTaskResult wraps the response with optional metadata
+type CancelTaskResult struct {
+	Response *CancelTaskResponse
+	Message  string // Informational message from server
+}
+
+// CancelTaskWithMessage POSTs to /v1/tasks/{id}:cancel and returns any informational message
+func (c *Client) CancelTaskWithMessage(ctx context.Context, req *CancelTaskRequest) (*CancelTaskResult, error) {
 	u := c.address + "/v1/tasks/" + req.Id + ":cancel"
 	hreq, _ := http.NewRequest("POST", u, nil)
-	hreq.WithContext(ctx)
+	hreq = hreq.WithContext(ctx)
 	hreq.Header.Add("Content-Type", "application/json")
 	c.setCredentials(hreq)
-	body, err := util.CheckHTTPResponse(c.client.Do(hreq))
+
+	// Execute request and capture response
+	httpResp, err := c.client.Do(hreq)
+	if err != nil {
+		return nil, err
+	}
+	defer httpResp.Body.Close()
+
+	body, err := util.CheckHTTPResponse(httpResp, err)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse response
+	// Check if the response contains a message field (from middleware)
+	var rawResponse map[string]interface{}
+	if err := json.Unmarshal(body, &rawResponse); err == nil {
+		if msg, ok := rawResponse["message"].(string); ok {
+			// This is a message response, not a protobuf response
+			return &CancelTaskResult{
+				Response: &CancelTaskResponse{},
+				Message:  msg,
+			}, nil
+		}
+	}
+
+	// Parse as normal protobuf response
 	resp := &CancelTaskResponse{}
 	err = protojson.Unmarshal(body, resp)
 	if err != nil {
 		return nil, err
 	}
-	return resp, nil
+
+	// Check for message in header (fallback for direct gRPC)
+	message := httpResp.Header.Get("Grpc-Metadata-X-Funnel-Message")
+
+	return &CancelTaskResult{
+		Response: resp,
+		Message:  message,
+	}, nil
 }
 
 // GetServiceInfo returns result of GET /v1/service-info
 func (c *Client) GetServiceInfo(ctx context.Context, req *GetServiceInfoRequest) (*ServiceInfo, error) {
 	u := c.address + "/v1/service-info"
 	hreq, _ := http.NewRequest("GET", u, nil)
-	hreq.WithContext(ctx)
+	hreq = hreq.WithContext(ctx)
 	c.setCredentials(hreq)
 	body, err := util.CheckHTTPResponse(c.client.Do(hreq))
 	if err != nil {
@@ -217,6 +260,8 @@ func (c *Client) WaitForTask(ctx context.Context, taskIDs ...string) error {
 	return nil
 }
 
+// setCredentials authenticates the request with the Bearer token
+// (FUNNEL_SERVER_TOKEN) when available, otherwise with Basic credentials.
 func (c *Client) setCredentials(request *http.Request) {
 	if c.Token != "" {
 		request.Header.Add("Authorization", "Bearer "+c.Token)

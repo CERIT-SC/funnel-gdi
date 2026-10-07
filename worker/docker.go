@@ -6,13 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"text/template"
 	"time"
 
+	"github.com/google/shlex"
 	"github.com/ohsu-comp-bio/funnel/events"
+	tes "github.com/ohsu-comp-bio/funnel/tes"
 )
 
 // DockerCommand is responsible for configuring and running a docker container.
@@ -29,7 +33,32 @@ type DockerCommand struct {
 	StopCommand     string // template string
 	EnableTags      bool
 	Tags            map[string]string
+	Resources       *tes.Resources
 	Command
+}
+
+// MemoryMB returns the task's requested RAM as an integer megabyte value
+// suitable for passing to nerdctl/docker --memory flag (e.g. "2048m").
+// Returns 0 if no memory limit is set.
+func (docker DockerCommand) MemoryMB() int64 {
+	if docker.Resources == nil || docker.Resources.RamGb <= 0 {
+		return 0
+	}
+	return int64(math.Round(docker.Resources.RamGb * 1024))
+}
+
+// NeedsTmpfs reports whether the container needs Funnel's executor-local /tmp
+// mount. A task-provided mount at /tmp or one of its ancestors takes precedence
+// so explicitly requested storage can persist between executors.
+func (docker DockerCommand) NeedsTmpfs() bool {
+	const tmpDir = "/tmp"
+	for _, volume := range docker.Volumes {
+		containerPath := path.Clean(volume.ContainerPath)
+		if containerPath == "/" || containerPath == tmpDir || strings.HasPrefix(tmpDir, containerPath+"/") {
+			return false
+		}
+	}
+	return true
 }
 
 type DockerVersion struct {
@@ -47,7 +76,7 @@ func (docker DockerCommand) Run(ctx context.Context) error {
 
 	err = docker.executeCommand(ctx, docker.PullCommand, false)
 	if err != nil {
-		docker.Event.Error("failed to pull docker image", err)
+		docker.Event.Error("failed to pull docker image using command", err, docker.PullCommand)
 	}
 
 	err = docker.executeCommand(ctx, docker.RunCommand, true)
@@ -87,10 +116,21 @@ func (docker DockerCommand) executeCommand(ctx context.Context, commandTemplate 
 		return fmt.Errorf("failed to execute template for command: %w", err)
 	}
 
-	cmdParts := strings.Fields(cmdBuffer.String())
+	cmdParts, err := shlex.Split(cmdBuffer.String())
+	if err != nil {
+		return fmt.Errorf("failed to parse command: %w", err)
+	}
+
 	if usingCommand {
 		go docker.InspectContainer(ctx)
-		cmdParts = append(cmdParts, docker.Command.ShellCommand...)
+
+		commandToExecute := docker.Command.ShellCommand
+		if len(commandToExecute) == 1 {
+			cmdString := commandToExecute[0]
+			commandToExecute = []string{"/bin/sh", "-c", cmdString}
+		}
+
+		cmdParts = append(cmdParts, commandToExecute...)
 	}
 
 	driverCmd := strings.Fields(docker.DriverCommand)
@@ -127,6 +167,40 @@ func formatVolumeArg(v Volume) string {
 		mode = "ro"
 	}
 	return fmt.Sprintf("%s:%s:%s", v.HostPath, v.ContainerPath, mode)
+}
+
+// shellEscape safely escapes a string for use in a POSIX shell context.
+// It wraps the value in single quotes and correctly handles embedded single quotes
+// by closing the quote, inserting an escaped single quote, and reopening the quote.
+func shellEscape(s string) string {
+	if s == "" {
+		return "''"
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 2) // approximate
+	b.WriteByte('\'')
+	for _, r := range s {
+		if r == '\'' {
+			b.WriteString("'\"'\"'")
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
+
+func formatEnvVars(env map[string]string) []string {
+	var result []string
+	for k, v := range env {
+		escapedValue := shellEscape(v)
+		result = append(result, fmt.Sprintf("--env %s=%s", k, escapedValue))
+	}
+	return result
+}
+
+func (docker DockerCommand) GetEnvArgs() string {
+	return strings.Join(formatEnvVars(docker.Env), " ")
 }
 
 func (docker DockerCommand) GetImage() string {

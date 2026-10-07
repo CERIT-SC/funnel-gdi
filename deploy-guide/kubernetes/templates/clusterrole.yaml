@@ -1,0 +1,18 @@
+{{- if and .Values.rbac.create (eq .Values.pvcMode "full") }}
+# persistentvolumes is cluster-scoped, so it can't be granted via the
+# namespaced Role (role.yaml). Only pvcMode "full" needs this: it's the only
+# mode where Funnel itself creates/deletes PVs (see createPV/PVCModeFull in
+# compute/kubernetes/backend.go). "shared" creates
+# nothing, and "pvc" only touches PVCs (already covered by role.yaml) - the
+# cluster dynamically provisions their PVs without Funnel calling the
+# PersistentVolumes API. Your account usually can't create this on a
+# shared/multi-tenant cluster - ask your admin, or use "shared"/"pvc" instead.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-{{ .Release.Name }}-clusterrole
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+{{- end }}

@@ -16,17 +16,20 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/ohsu-comp-bio/funnel/config"
 	util "github.com/ohsu-comp-bio/funnel/util/aws"
+	s3util "github.com/ohsu-comp-bio/funnel/util/s3"
 )
-
-var endpointRE = regexp.MustCompile("^(http[s]?://)?(.[^/]+)(.+)?$")
 
 // s3Protocol defines the s3 URL protocol
 const s3Protocol = "s3://"
 
 // AmazonS3 provides access to an S3 object store.
 type AmazonS3 struct {
-	sess                 *session.Session
-	endpoint             string
+	sess     *session.Session
+	endpoint string
+	// region is the pre-configured AWS/S3-compatible region.  When set together
+	// with endpoint (non-AWS deployments), GetBucketRegion is skipped and this
+	// value is used directly.
+	region               string
 	customerAlgorithm    *string
 	customerKey          *string
 	customerKeyMD5       *string
@@ -35,15 +38,15 @@ type AmazonS3 struct {
 }
 
 // NewAmazonS3 creates an AmazonS3 session instance
-func NewAmazonS3(conf config.AmazonS3Storage) (*AmazonS3, error) {
+func NewAmazonS3(conf *config.AmazonS3Storage) (*AmazonS3, error) {
 	sess, err := util.NewAWSSession(conf.AWSConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error creating amazon s3 backend: %v", err)
 	}
 
 	var endpoint string
-	if conf.Endpoint != "" {
-		endpoint = endpointRE.ReplaceAllString(conf.Endpoint, "$2/")
+	if conf.AWSConfig.Endpoint != "" {
+		endpoint = s3util.ParseEndpoint(conf.AWSConfig.Endpoint)
 	}
 
 	// handle SSE config
@@ -53,11 +56,11 @@ func NewAmazonS3(conf config.AmazonS3Storage) (*AmazonS3, error) {
 	var kmsKeyID *string
 	var serverSideEncryption *string
 
-	if conf.SSE.CustomerKeyFile != "" && conf.SSE.KMSKey != "" {
+	if conf.SSE != nil && conf.SSE.CustomerKeyFile != "" && conf.SSE.KMSKey != "" {
 		return nil, fmt.Errorf("invalid SSE config: can't provide both Customer and KMS keys")
 	}
 
-	if conf.SSE.CustomerKeyFile != "" {
+	if conf.SSE != nil && conf.SSE.CustomerKeyFile != "" {
 		key, err := os.ReadFile(conf.SSE.CustomerKeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("error reading sse-c file: %v", err)
@@ -69,7 +72,7 @@ func NewAmazonS3(conf config.AmazonS3Storage) (*AmazonS3, error) {
 		customerKeyMD5 = aws.String(base64.StdEncoding.EncodeToString(b[:]))
 	}
 
-	if conf.SSE.KMSKey != "" {
+	if conf.SSE != nil && conf.SSE.KMSKey != "" {
 		serverSideEncryption = aws.String(s3.ServerSideEncryptionAwsKms)
 		kmsKeyID = aws.String(conf.SSE.KMSKey)
 	}
@@ -77,6 +80,7 @@ func NewAmazonS3(conf config.AmazonS3Storage) (*AmazonS3, error) {
 	return &AmazonS3{
 		sess,
 		endpoint,
+		conf.AWSConfig.Region,
 		customerAlgorithm,
 		customerKey,
 		customerKeyMD5,
@@ -311,9 +315,19 @@ func (s3b *AmazonS3) parse(rawurl string) (*urlparts, string, error) {
 		url.path = split[1]
 	}
 
-	region, err := s3manager.GetBucketRegion(context.Background(), s3b.sess, url.bucket, "us-east-1")
-	if err != nil {
-		return nil, "", fmt.Errorf("amazonS3: failed to determine region for bucket %q: %v", url.bucket, err)
+	// When a custom endpoint and a region are both configured (non-AWS S3-compatible
+	// services such as OVH Object Storage), skip the GetBucketRegion call: it
+	// performs an AWS-specific HeadBucket request that non-AWS providers reject
+	// with a 400 Bad Request.  Use the pre-configured region directly instead.
+	var region string
+	if s3b.endpoint != "" && s3b.region != "" {
+		region = s3b.region
+	} else {
+		var err error
+		region, err = s3manager.GetBucketRegion(context.Background(), s3b.sess, url.bucket, "us-east-1")
+		if err != nil {
+			return nil, "", fmt.Errorf("amazonS3: failed to determine region for bucket %q: %v", url.bucket, err)
+		}
 	}
 	return url, region, nil
 }

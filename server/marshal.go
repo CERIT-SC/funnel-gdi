@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -19,6 +21,11 @@ type CustomMarshal struct {
 	m runtime.Marshaler
 }
 
+type normalizingDecoder struct {
+	m runtime.Marshaler
+	r io.Reader
+}
+
 func NewMarshaler() runtime.Marshaler {
 	return &CustomMarshal{
 		m: &runtime.JSONPb{
@@ -32,9 +39,9 @@ func NewMarshaler() runtime.Marshaler {
 	}
 }
 
-// ContentType return content type of marshler
-func (marshal *CustomMarshal) ContentType(i interface{}) string {
-	return marshal.m.ContentType(i)
+// ContentType return content type of marshaller
+func (c *CustomMarshal) ContentType(i interface{}) string {
+	return c.m.ContentType(i)
 }
 
 // Marshal serializes v into a JSON encoded byte array. If v is of
@@ -101,7 +108,7 @@ func (c *CustomMarshal) DetectView(task *tes.Task) (tes.View, error) {
 		return tes.View_MINIMAL, nil
 	}
 
-	if len(task.Logs[0].SystemLogs) == 0 {
+	if len(task.Logs) == 0 || len(task.Logs[0].SystemLogs) == 0 {
 		return tes.View_BASIC, nil
 	}
 
@@ -180,7 +187,61 @@ func (c *CustomMarshal) TranslateTask(task *tes.Task, view tes.View) interface{}
 
 // NewDecoder shims runtime.Marshaler.NewDecoder
 func (c *CustomMarshal) NewDecoder(r io.Reader) runtime.Decoder {
-	return c.m.NewDecoder(r)
+	return &normalizingDecoder{
+		m: c.m,
+		r: r,
+	}
+}
+
+func (d *normalizingDecoder) Decode(v interface{}) error {
+	// Only perform normalization (and thus full buffering) for *tes.Task.
+	if _, ok := v.(*tes.Task); !ok {
+		return d.m.NewDecoder(d.r).Decode(v)
+	}
+
+	body, err := io.ReadAll(d.r)
+	if err != nil {
+		return err
+	}
+
+	body, err = normalizeNilTagValues(body)
+	if err != nil {
+		return err
+	}
+
+	return d.m.NewDecoder(bytes.NewReader(body)).Decode(v)
+}
+
+func normalizeNilTagValues(body []byte) ([]byte, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return body, nil
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+
+	rawTags, ok := payload["tags"]
+	if !ok || rawTags == nil {
+		return body, nil
+	}
+
+	tags, ok := rawTags.(map[string]interface{})
+	if !ok {
+		return body, nil
+	}
+
+	for key, value := range tags {
+		if value == nil {
+			delete(tags, key)
+		}
+	}
+
+	if len(tags) == 0 {
+		delete(payload, "tags")
+	}
+	return json.Marshal(payload)
 }
 
 // NewEncoder shims runtime.Marshaler.NewEncoder

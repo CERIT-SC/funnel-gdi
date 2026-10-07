@@ -2,49 +2,68 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/encrypt"
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/logger"
+	s3util "github.com/ohsu-comp-bio/funnel/util/s3"
 )
 
 // GenericS3 provides access to an S3 object store.
 type GenericS3 struct {
 	client   *minio.Client
 	endpoint string
+	kmskeyId string
 }
 
 // NewGenericS3 creates a new GenericS3 instance, given an endpoint URL
 // and a set of authentication credentials.
-func NewGenericS3(conf config.GenericS3Storage) (*GenericS3, error) {
-	ssl := strings.HasPrefix(conf.Endpoint, "https")
-	endpoint := endpointRE.ReplaceAllString(conf.Endpoint, "$2")
-	client, err := minio.NewV2(endpoint, conf.Key, conf.Secret, ssl)
+func NewGenericS3(conf *config.GenericS3Storage) (*GenericS3, error) {
+
+	var endpoint string
+	if conf.Endpoint != "" {
+		endpoint = s3util.ParseEndpoint(conf.Endpoint)
+	}
+
+	logger := logger.NewLogger("GenericS3", logger.DefaultConfig())
+	logger.Debug("generics3: connecting to endpoint", "endpoint", endpoint)
+
+	client, err := minio.New(
+		endpoint,
+		&minio.Options{
+			Creds:  credentials.NewStaticV4(conf.Key, conf.Secret, ""),
+			Secure: strings.HasPrefix(conf.Endpoint, "https"),
+			Region: conf.Region,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error creating generic s3 backend: %v", err)
 	}
 
-	return &GenericS3{client, endpoint + "/"}, nil
+	return &GenericS3{client, endpoint + "/", conf.KmsKeyID}, nil
 }
 
 // Returns true if a remote S3 object is a directory, false otherwise
-func isDir(minioClient *minio.Client, bucketName, objectName string) (bool, error) {
+func isDir(ctx context.Context, minioClient *minio.Client, bucketName, objectName string) (bool, error) {
 	// Check if the objectName ends with '/' - often used to represent 'folders'
 	if strings.HasSuffix(objectName, "/") {
 		return true, nil
 	}
 
 	// List objects with the prefix to see if there are multiple keys with the given prefix
-	// Create a done channel.
-	doneCh := make(chan struct{})
-	defer close(doneCh)
-
 	// Recursively list all objects
 	recursive := true
-	for object := range minioClient.ListObjects(bucketName, objectName, recursive, doneCh) {
+	for object := range minioClient.ListObjects(ctx, bucketName, minio.ListObjectsOptions{Prefix: objectName, Recursive: recursive}) {
 		if object.Err != nil {
 			return false, object.Err
 		}
@@ -61,20 +80,23 @@ func isDir(minioClient *minio.Client, bucketName, objectName string) (bool, erro
 
 // Stat returns information about the object at the given storage URL.
 func (s3 *GenericS3) Stat(ctx context.Context, url string) (*Object, error) {
+	logger := logger.NewLogger("GenericS3", logger.DefaultConfig())
 	u, err := s3.parse(url)
 	if err != nil {
 		return nil, err
 	}
 
 	opts := minio.GetObjectOptions{}
-	obj, err := s3.client.GetObjectWithContext(ctx, u.bucket, u.path, opts)
+	logger.Debug("genericS3: s3.client.GetObject", "bucket", u.bucket, "path", u.path)
+	obj, err := s3.client.GetObject(ctx, u.bucket, u.path, opts)
 	if err != nil {
-		return nil, fmt.Errorf("genericS3: getting object: %s", err)
+		logger.Debug("genericS3: getting object from s3.client.GetObject", "url", url, "error", err)
+		return nil, fmt.Errorf("genericS3: getting object %s in bucket %s: %s", u.path, u.bucket, err)
 	}
 
-	isDir, err := isDir(s3.client, u.bucket, u.path)
+	isDir, err := isDir(ctx, s3.client, u.bucket, u.path)
 	if err != nil {
-		return nil, fmt.Errorf("genericS3: stat object: %s", err)
+		return nil, fmt.Errorf("genericS3: stat object %s in bucket %s: %s", u.path, u.bucket, err)
 	}
 	if isDir {
 		return &Object{
@@ -86,7 +108,7 @@ func (s3 *GenericS3) Stat(ctx context.Context, url string) (*Object, error) {
 
 	info, err := obj.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("genericS3: stat object: %s", err)
+		return nil, fmt.Errorf("genericS3: stat object %s in bucket %s: %s", u.path, u.bucket, err)
 	}
 
 	return &Object{
@@ -108,7 +130,7 @@ func (s3 *GenericS3) List(ctx context.Context, url string) ([]*Object, error) {
 	// Recursively list all objects.
 	var objects []*Object
 	recursive := true
-	for info := range s3.client.ListObjects(u.bucket, u.path, recursive, ctx.Done()) {
+	for info := range s3.client.ListObjects(ctx, u.bucket, minio.ListObjectsOptions{Prefix: u.path, Recursive: recursive}) {
 		// check if key represents a directory
 		if strings.HasSuffix(info.Key, "/") {
 			continue
@@ -127,6 +149,9 @@ func (s3 *GenericS3) List(ctx context.Context, url string) ([]*Object, error) {
 
 // Get copies an object from S3 to the host path.
 func (s3 *GenericS3) Get(ctx context.Context, url, path string) (*Object, error) {
+	logger := logger.NewLogger("GenericS3", logger.DefaultConfig())
+	logger.Debug("genericS3: Get called", "url", url, "path", path)
+
 	obj, err := s3.Stat(ctx, url)
 	if err != nil {
 		return nil, err
@@ -137,9 +162,10 @@ func (s3 *GenericS3) Get(ctx context.Context, url, path string) (*Object, error)
 		return nil, err
 	}
 
-	isDir, err := isDir(s3.client, u.bucket, u.path)
+	isDir, err := isDir(ctx, s3.client, u.bucket, u.path)
 	if err != nil {
-		return nil, fmt.Errorf("genericS3: getting object %s: %v", url, err)
+		logger.Debug("genericS3: checking directory", "bucket", u.bucket, "path", u.path)
+		return nil, fmt.Errorf("genericS3: getting object from isDir %s: %v", url, err)
 	}
 	if isDir {
 		objects, err := s3.List(ctx, url)
@@ -148,21 +174,92 @@ func (s3 *GenericS3) Get(ctx context.Context, url, path string) (*Object, error)
 		}
 
 		for _, obj := range objects {
-			// Recursively download files and subdirectories
-			_, err := s3.Get(ctx, obj.URL, filepath.Join(path, obj.Name))
+			relPath, err := filepath.Rel(u.path, obj.Name)
+			if err != nil {
+				return nil, fmt.Errorf("genericS3: computing relative path for %s: %v", obj.Name, err)
+			}
+			err = download(ctx, s3.client, u.bucket, obj.Name, filepath.Join(path, relPath), s3.kmskeyId)
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		opts := minio.GetObjectOptions{}
-		err = s3.client.FGetObjectWithContext(ctx, u.bucket, u.path, path, opts)
+		err = download(ctx, s3.client, u.bucket, u.path, path, s3.kmskeyId)
 		if err != nil {
-			return nil, fmt.Errorf("genericS3: getting object %s: %v", url, err)
+			return nil, fmt.Errorf("genericS3: getting object from download %s: %v", url, err)
 		}
 	}
 
 	return obj, nil
+}
+
+// download streams an object to a file without using os.Rename
+func download(ctx context.Context, client *minio.Client, bucket, objectPath, filePath, kmskeyId string) error {
+	opts := minio.GetObjectOptions{}
+	if kmskeyId != "" {
+		logger.Debug("genericS3: using KMS encryption", "kmsKeyId", kmskeyId)
+		SSEKMS, err := encrypt.NewSSEKMS(kmskeyId, ctx)
+		if err != nil {
+			return fmt.Errorf("genericS3: download(): creating SSEKMS: %v", err)
+		}
+		opts.ServerSideEncryption = SSEKMS
+	}
+
+	logger.Debug("genericS3: downloading object", "bucket", bucket, "objectPath", objectPath, "filePath", filePath)
+	// Step 1: Get the object stream
+	// TODO: Add logging with file contents here...
+	obj, err := client.GetObject(ctx, bucket, objectPath, opts)
+	if err != nil {
+		return fmt.Errorf("failed getting object from S3: %w", err)
+	}
+	defer obj.Close()
+
+	// Step 2: Create the local file (overwrite if exists)
+	logger.Debug("genericS3: creating local file", "filePath", filePath)
+	dir := filepath.Dir(filePath)
+	err = os.MkdirAll(dir, 0755)
+	if err != nil {
+		return fmt.Errorf("failed creating directories: %w", err)
+	}
+
+	outFile, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed creating file: %w", err)
+	}
+
+	// Step 3: Copy the contents
+	logger.Debug("genericS3: io.Copy", "outFile", outFile.Name(), "obj", obj)
+	if _, err := io.Copy(outFile, obj); err != nil {
+		outFile.Close()
+		return fmt.Errorf("failed writing file: %w", err)
+	}
+
+	// Close explicitly (not via defer) so Mountpoint begins flushing to S3
+	// before we poll for readability below.
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed closing file: %w", err)
+	}
+
+	// Wait for the file to become readable. When the path is on a
+	// Mountpoint-for-S3 backed filesystem, closing the write handle triggers
+	// an async S3 upload; os.Stat returns EPERM until that upload finishes.
+	const mountpointFlushTimeout = 5 * time.Minute
+	const mountpointFlushInterval = 2 * time.Second
+	deadline := time.Now().Add(mountpointFlushTimeout)
+	for {
+		_, err := os.Stat(filePath)
+		if err == nil {
+			break
+		}
+		if time.Now().Before(deadline) && (errors.Is(err, syscall.EPERM) || errors.Is(err, os.ErrNotExist)) {
+			logger.Debug("genericS3: waiting for input file to be readable after write", "path", filePath, "error", err)
+			time.Sleep(mountpointFlushInterval)
+			continue
+		}
+		return fmt.Errorf("failed waiting for file to become readable: %w", err)
+	}
+
+	return nil
 }
 
 // Put copies an object (file) from the host path to S3.
@@ -174,12 +271,39 @@ func (s3 *GenericS3) Put(ctx context.Context, url, path string) (*Object, error)
 	}
 
 	opts := minio.PutObjectOptions{}
+	if s3.kmskeyId != "" {
+		logger.Debug("genericS3: using KMS encryption for upload", "kmsKeyId", s3.kmskeyId)
+		SSEKMS, err := encrypt.NewSSEKMS(s3.kmskeyId, ctx)
+		if err != nil {
+			return nil, fmt.Errorf("genericS3: Put(): creating SSEKMS: %v", err)
+		}
+		opts.ServerSideEncryption = SSEKMS
+	}
+
+	// Wait for the local path to become readable. When the local path is on a
+	// Mountpoint-for-S3 backed filesystem and the file was written by another
+	// mount instance (the executor pod), os.Stat returns EPERM until Mountpoint
+	// finishes flushing the write to S3. Poll until the file is readable or the
+	// timeout expires.
+	const mountpointFlushTimeout = 5 * time.Minute
+	const mountpointFlushInterval = 2 * time.Second
+	deadline := time.Now().Add(mountpointFlushTimeout)
+	var fileInfo os.FileInfo
+	for {
+		var err error
+		fileInfo, err = os.Stat(path)
+		if err == nil {
+			break
+		}
+		if time.Now().Before(deadline) && (errors.Is(err, syscall.EPERM) || errors.Is(err, os.ErrNotExist)) {
+			logger.Debug("genericS3: waiting for output file to become readable", "path", path, "error", err)
+			time.Sleep(mountpointFlushInterval)
+			continue
+		}
+		return nil, fmt.Errorf("genericS3: putting object %s: %v", url, err)
+	}
 
 	// Check if the path is a directory
-	fileInfo, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
 	if fileInfo.IsDir() {
 		// Walk the directory and upload all files and subdirectories
 		err = filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
@@ -193,9 +317,9 @@ func (s3 *GenericS3) Put(ctx context.Context, url, path string) (*Object, error)
 					return err
 				}
 				uploadPath := filepath.Join(u.path, relativePath)
-				_, err = s3.client.FPutObjectWithContext(ctx, u.bucket, uploadPath, filePath, opts)
+				_, err = s3.client.FPutObject(ctx, u.bucket, uploadPath, filePath, opts)
 				if err != nil {
-					return fmt.Errorf("genericS3: putting object %s: %v", url, err)
+					return fmt.Errorf("genericS3: putting nested object %s: %v", url, err)
 				}
 			}
 			return nil
@@ -204,14 +328,15 @@ func (s3 *GenericS3) Put(ctx context.Context, url, path string) (*Object, error)
 			return nil, err
 		}
 	} else {
-		// Upload the file directly
-		_, err = s3.client.FPutObjectWithContext(ctx, u.bucket, u.path, path, opts)
+		_, err = s3.client.FPutObject(ctx, u.bucket, u.path, path, opts)
 		if err != nil {
 			return nil, fmt.Errorf("genericS3: putting object %s: %v", url, err)
 		}
 	}
 
-	return s3.Stat(ctx, url)
+	obj, err := s3.Stat(ctx, url)
+
+	return obj, err
 }
 
 // Join joins the given URL with the given subpath.
@@ -226,7 +351,7 @@ func (s3 *GenericS3) UnsupportedOperations(url string) UnsupportedOperations {
 	if err != nil {
 		return AllUnsupported(err)
 	}
-	ok, err := s3.client.BucketExists(u.bucket)
+	ok, err := s3.client.BucketExists(context.Background(), u.bucket)
 	if err != nil {
 		err = fmt.Errorf("genericS3: failed to find bucket %q: %v", u.bucket, err)
 		return AllUnsupported(err)
