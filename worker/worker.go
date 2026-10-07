@@ -42,6 +42,10 @@ type Executor struct {
 	Namespace string
 	// Kubernetes service account name
 	ServiceAccount string
+	// PVCMode mirrors config.Kubernetes.PVCMode ("full", "pvc", or "shared")
+	PVCMode string
+	// SharedPVCName mirrors config.Kubernetes.SharedPVCName
+	SharedPVCName string
 }
 
 // Run runs the Worker.
@@ -196,13 +200,15 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 
 			if r.Executor.Backend == "kubernetes" {
 				taskCommand = &KubernetesCommand{
-					TaskId:       task.Id,
-					JobId:        i,
-					StdinFile:    d.Stdin,
-					TaskTemplate: r.Executor.Template,
-					Namespace:    r.Executor.Namespace,
-					Resources:    resources,
-					Command:      command,
+					TaskId:        task.Id,
+					JobId:         i,
+					StdinFile:     d.Stdin,
+					TaskTemplate:  r.Executor.Template,
+					Namespace:     r.Executor.Namespace,
+					Resources:     resources,
+					Command:       command,
+					PVCMode:       r.Executor.PVCMode,
+					SharedPVCName: r.Executor.SharedPVCName,
 				}
 			} else {
 				taskCommand = &DockerCommand{

@@ -16,6 +16,7 @@ Kubernetes:
   ExecutorTemplate: |
 {{ default (.Files.Get "config/kubernetes-executor-template.yaml") .Values.Kubernetes.ExecutorTemplate | indent 4 }}
   ExecutorTemplateFile: {{ .Values.Kubernetes.ExecutorTemplateFile }}
+  PVCMode: {{ .Values.Kubernetes.PVCMode | quote }}
 
 Logger:
   Level: {{ .Values.Logger.level }}

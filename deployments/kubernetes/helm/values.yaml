@@ -30,8 +30,17 @@ serviceAccount:
   name: funnel-sa
 
 storage:
-  className: gp2
-  provisioner: kubernetes.io/aws-ebs
+  # Must be a StorageClass that supports ReadWriteMany (e.g. an NFS/CephFS CSI
+  # driver). This PVC (funnel-pvc) is shared by the Funnel server, every
+  # worker Job, and every executor Job, isolated only by subPath: {{.TaskId}}
+  # in the job templates - not by node-local access, so RWO backends (e.g.
+  # AWS EBS/gp2) will not work here.
+  className: ""
+  accessMode: ReadWriteMany
+  # Only used if createStorageClass is true below; nfs-csi normally already
+  # exists in-cluster and this chart doesn't need to create it.
+  provisioner: ""
+  createStorageClass: false
   enabled: true
   size: 10Gi
   path: /mnt/data
@@ -369,6 +378,25 @@ Kubernetes:
   Bucket: ""
   # The region to use for the task's Bucket
   Region: ""
+  # PVCMode controls how per-task storage is provisioned. One of:
+  #   "full"   - create a dedicated PV + PVC per task (upstream's default
+  #              behavior), statically bound, backed by the S3 CSI driver
+  #              (Bucket/Region above).
+  #   "pvc"    - create only a dedicated PVC per task, dynamically
+  #              provisioned via StorageClassName below (requires a
+  #              ReadWriteMany-capable StorageClass).
+  #   "shared" - create nothing per task (our default); tasks instead share
+  #              the single pre-existing PVC created by templates/pvc.yaml
+  #              ("funnel-pvc"), which requires a ReadWriteMany-capable
+  #              StorageClass - see the `storage` section above.
+  PVCMode: "shared"
+  # StorageClassName is the StorageClass used for the dynamically-provisioned
+  # PVC when PVCMode is "pvc". Unused for "full" and "shared".
+  StorageClassName: ""
+  # Per-task PV template, only used when PVCMode is "full". See config/kubernetes-pv.yaml.
+  PVTemplate: ""
+  # Per-task PVC template, used when PVCMode is "full" or "pvc". See config/kubernetes-pvc.yaml.
+  PVCTemplate: ""
 
   # Configuration of the Kubernetes executor.
 
