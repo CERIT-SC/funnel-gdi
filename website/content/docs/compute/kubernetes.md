@@ -8,6 +8,15 @@ menu:
 
 > Funnel on Kubernetes is in active development and may involve frequent updates 🚧
 
+> [!IMPORTANT]
+>
+> **GDI fork:** deploy funnel-gdi with its own Helm chart `deploy-guide/kubernetes`
+> as described in the [Deployment guide, Option 2](/gdi/deployment/#option-2-kubernetes).
+> The Quick Start below uses the upstream Helm repository and image, which do
+> not contain the GDI features. The
+> [Per-task storage modes](#per-task-storage-modes-pvcmode) section applies to
+> the GDI fork.
+
 # Quick Start
 
 ## 1. Deploying with Helm ⚡️
@@ -130,7 +139,8 @@ Kubernetes:
 shared/on-premise clusters without an S3 CSI driver. Custom `WorkerTemplate`,
 `ExecutorTemplate` and `PVCTemplate` should reference the claim as
 `{{.PVCName}}` and, in `PVCTemplate`, use `{{.StorageClassName}}` (see
-`config/kubernetes/worker-pvc.yaml`). `WorkerImage` optionally overrides the
+`deploy-guide/kubernetes/files/worker-pvc.yaml` in the GDI chart, or the
+built-in default `config/kubernetes/worker-pvc.yaml`). `WorkerImage` optionally overrides the
 Worker Job image (default: the image of the running Funnel server pod).
 
 # Additional Resources 📚

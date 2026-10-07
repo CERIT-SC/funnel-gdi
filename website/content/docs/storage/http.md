@@ -18,7 +18,8 @@ worker config:
 HTTPStorage:
   Disabled: false
   # Timeout for http(s) GET requests.
-  Timeout: 30s
+  Timeout:
+    duration: 30s
 ```
 
 ### Example task
@@ -31,7 +32,7 @@ HTTPStorage:
   }],
   "executors": [{
     "image": "alpine",
-    "command": ["cat", "/inputs/hello.txt"],
+    "command": ["cat", "/inputs/hello.txt"]
   }]
 }
 ```

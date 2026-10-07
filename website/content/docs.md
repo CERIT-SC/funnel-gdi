@@ -9,15 +9,15 @@ menu:
 # Overview
 
 Funnel makes distributed, batch processing easier by providing a simple task API and a set of
-components which can easily adapted to a vareity of platforms.
+components which can easily be adapted to a variety of platforms.
 
 ### Task
 
 A task defines a unit of work: metadata, input files to download, a sequence of Docker containers + commands to run,
 output files to upload, state, and logs. The API allows you to create, get, list, and cancel tasks.
 
-Tasks are accessed via the `funnel task` command. There's an HTTP client in the [client package][clientpkg],
-and a set of utilities and a gRPC client in the [proto/tes package][tespkg].
+Tasks are accessed via the `funnel task` command. The HTTP client, the gRPC/Protobuf
+definitions and a set of utilities are in the [tes package][tespkg].
 
 There's a lot more you can do with the task API. See the [tasks docs](/docs/tasks/) for more.
 
@@ -39,7 +39,7 @@ The storage clients are available in the [storage package][storagepkg].
 
 ### Worker
 
-A worker is reponsible for executing a task. There is one worker per task. A worker:
+A worker is responsible for executing a task. There is one worker per task. A worker:
 
 - downloads the inputs
 - runs the sequence of executors (usually via Docker)
@@ -74,9 +74,8 @@ See [Deploying a cluster](/docs/compute/deployment/) for more information about 
 The node is accessible via the `funnel node` command and the [scheduler package][schedpkg].
 
 [tes]: https://github.com/ga4gh/task-execution-schemas
-[serverpkg]: https://github.com/ohsu-comp-bio/funnel/tree/master/server
-[workerpkg]: https://github.com/ohsu-comp-bio/funnel/tree/master/worker
-[schedpkg]: https://github.com/ohsu-comp-bio/funnel/tree/master/compute/scheduler
-[clientpkg]: https://github.com/ohsu-comp-bio/funnel/tree/master/client
-[tespkg]: https://github.com/ohsu-comp-bio/funnel/tree/master/proto/tes
-[storagepkg]: https://github.com/ohsu-comp-bio/funnel/tree/master/storage
+[serverpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/server
+[workerpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/worker
+[schedpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/compute/scheduler
+[tespkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/tes
+[storagepkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/storage

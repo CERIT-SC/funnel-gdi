@@ -1,0 +1,54 @@
+{{/* Shows which funnel-gdi version this documentation describes, with a
+     switcher to the other published versions (siteRoot/versions.json,
+     written by website/scripts/build-versions.sh). */}}
+{{ $build := hugo.Data.gdi_build | default dict }}
+{{ $version := $build.version | default "dev" }}
+<div class="version-bar">
+  <div class="version-bar-container">
+    <span>
+      Documentation for <strong>funnel-gdi {{ $version }}</strong>
+      {{ if eq $version "dev" }}
+        — development version (<code>{{ $build.ref | default "master-gdi" }}</code>{{ with $build.commit }} @ <code>{{ . }}</code>{{ end }}), may describe unreleased changes
+      {{ end }}
+      {{ with $build.date }}<span class="version-bar-date">· built {{ . }}</span>{{ end }}
+    </span>
+    <label class="version-switcher" hidden>
+      Version
+      <select id="version-select" aria-label="Documentation version"></select>
+    </label>
+  </div>
+</div>
+<script>
+  (function () {
+    var siteRoot = {{ .Site.Params.siteRoot }};
+    var current = {{ $version }};
+    var label = document.querySelector(".version-switcher");
+    var select = document.getElementById("version-select");
+    if (!siteRoot || window.location.href.indexOf(siteRoot) !== 0) return;
+    fetch(siteRoot + "versions.json")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (versions) {
+        versions.forEach(function (v) {
+          var option = document.createElement("option");
+          option.value = v.url || siteRoot + v.path;
+          option.textContent = v.name + (v.latest ? " (latest)" : "") + (v.url ? " ↗ GitHub" : "");
+          option.selected = v.name === current;
+          option.dataset.external = v.url ? "1" : "";
+          select.appendChild(option);
+        });
+        label.hidden = false;
+        select.addEventListener("change", function () {
+          var option = select.options[select.selectedIndex];
+          if (option.dataset.external) { window.location.href = option.value; return; }
+          // Open the same page in the other version, or its home page if
+          // the page does not exist there.
+          var rest = window.location.href.slice(siteRoot.length).split("/").slice(1).join("/");
+          var target = option.value + rest;
+          fetch(target, { method: "HEAD" })
+            .then(function (r) { window.location.href = r.ok ? target : option.value; })
+            .catch(function () { window.location.href = option.value; });
+        });
+      })
+      .catch(function () {});
+  })();
+</script>

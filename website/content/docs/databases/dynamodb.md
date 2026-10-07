@@ -1,4 +1,5 @@
 ---
+gdi_support: unsupported
 title: DynamoDB
 menu:
   main:
@@ -17,12 +18,13 @@ Database: dynamodb
 DynamoDB:
   # Basename to use for dynamodb tables
   TableBasename: "funnel"
-  # AWS region
-  Region: "us-west-2"
-  # AWS Access key ID
-  Key: ""
-  # AWS Secret Access Key
-  Secret: ""
+  AWSConfig:
+    # AWS region
+    Region: "us-west-2"
+    # AWS Access key ID
+    Key: ""
+    # AWS Secret Access Key
+    Secret: ""
 ```
 
 ### Known issues

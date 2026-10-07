@@ -29,3 +29,16 @@ website/go.mod
 website/go.sum
 website/resources
 
+
+# Website pages generated from the root documents (website/scripts/sync-gdi-docs.py)
+/website/content/gdi/deployment.md
+/website/content/gdi/features.md
+/website/content/gdi/release-policy.md
+/website/content/gdi/security.md
+/website/data/gdi_build.json
+# Pinned Hugo module versions, so every documentation version builds the same way
+!/website/go.mod
+!/website/go.sum
+
+# Binary built by `make build`
+/funnel

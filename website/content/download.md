@@ -1,61 +1,63 @@
 ---
 title: Download
+gdi: true
 menu:
   main:
     weight: -1000
 ---
 
-# Download
+# Download funnel-gdi
+
+funnel-gdi is released as a container image. There are no prebuilt binaries;
+build the binary from source if you need one. Before deploying, read the
+[Deployment guide](/gdi/deployment/) and its
+[system requirements](/gdi/deployment/#system-requirements).
 
 > [!NOTE]
 >
-> Funnel requires that [Docker](https://docker.io) be installed in order to run commands within a sandboxed environment.
+> Funnel runs tasks as containers, so the server needs access to Docker
+> (Options 1 and 3 of the deployment guide) or to a Kubernetes cluster (Option 2).
 
-## 1. Quick Start
+## Container image
 
-Run the following [install script](https://github.com/ohsu-comp-bio/funnel/blob/develop/install.sh) to fetch latest version of Funnel from [GitHub Releases](https://github.com/ohsu-comp-bio/funnel/releases):
+| | |
+|---|---|
+| Image | `ghcr.io/cerit-sc/funnel-gdi:<version>` |
+| Platforms | linux/amd64, linux/arm64 |
+| Versions | [package page](https://github.com/CERIT-SC/funnel-gdi/pkgs/container/funnel-gdi), [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) (release notes) |
 
-```sh
-curl -fsSL https://ohsu-comp-bio.github.io/funnel/install.sh | bash
-```
-
-## 2. Containers
-
-### Docker
-
-> [!TIP]
->
-> Docker Image → [quay.io/repository/ohsu-comp-bio/funnel:latest](https://quay.io/repository/ohsu-comp-bio/funnel?tab=tags&tag=testing)
+This documentation describes version **{{< gdi-version >}}**. Use the image
+with the same version as the documentation you follow.
 
 ```sh
-docker run -p 8000:8000 quay.io/ohsu-comp-bio/funnel:latest server run
+docker run -p 8000:8000 ghcr.io/cerit-sc/funnel-gdi:<version> server run
 
 # With config
-docker run -p 8000:8000 -v ./config.yaml:/config.yaml quay.io/ohsu-comp-bio/funnel:latest server run --config /config.yaml
+docker run -p 8000:8000 -v ./config.yaml:/config.yaml \
+  ghcr.io/cerit-sc/funnel-gdi:<version> server run --config /config.yaml
 ```
 
-### Podman
+This image cannot start task containers by itself. To run tasks, deploy it on
+Kubernetes ([Option 2](/gdi/deployment/#option-2-kubernetes)) or use the
+Docker-in-Docker variant ([Option 3](/gdi/deployment/#option-3-docker-container-no-kubernetes)).
 
-> [!TIP]
->
-> [Podman: Running a container](https://podman.io/docs#running-a-container)
+## Build from source
+
+Requires Go 1.26 or newer, `make` and `git`.
 
 ```sh
-podman run -p 8000:8000 quay.io/ohsu-comp-bio/funnel:latest server run
-
-# With config
-podman run -p 8000:8000 -v ./config.yaml:/config.yaml quay.io/ohsu-comp-bio/funnel:latest server run --config /config.yaml
+git clone https://github.com/CERIT-SC/funnel-gdi.git
+cd funnel-gdi
+git checkout <version>
+make build
+./funnel version
 ```
 
-### Singularity
+See [Option 1: Local binary](/gdi/deployment/#option-1-local-binary) for how
+to run it.
 
-> [!TIP]
->
-> [Singularity and Docker](https://docs.sylabs.io/guides/2.6/user-guide/singularity_and_docker.html)
+## Upstream Funnel
 
-```sh
-singularity run docker://quay.io/ohsu-comp-bio/funnel:latest server run 
-
-# With config
-singularity run --bind config.yaml:/config.yaml docker://quay.io/ohsu-comp-bio/funnel:latest server run --config /config.yaml
-```
+Binaries, the install script and the `quay.io/ohsu-comp-bio/funnel` images
+of upstream Funnel do **not** contain the GDI features. They are available
+from the upstream [Releases](https://github.com/calypr/funnel/releases) page.

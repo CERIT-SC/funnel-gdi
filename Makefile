@@ -238,16 +238,21 @@ bundle-examples-deps:
 # Make everything usually needed to prepare for a pull request
 full: proto install tidy lint test website webdash
 
+# Hugo module versions are pinned in website/go.mod (GDI fork).
 hugo-deps:
-	@cd website && \
-	([ -f go.mod ] || hugo mod init github.com/ohsu-comp-bio/funnel/website) && \
-	hugo mod get -u && \
-	hugo mod tidy
+	@cd website && hugo mod get
 
-# Build the website
+# Build the website (the GDI pages are generated from the root documents)
 website: hugo-deps
+	@python3 website/scripts/sync-gdi-docs.py
 	@hugo --source ./website --minify
 	@npx -y pagefind --site docs
+
+# Build all published documentation versions into build/pages, as the
+# "Documentation site" workflow does (the dev version from the working tree)
+website-versions: hugo-deps
+	@DEV_REF=WORKTREE website/scripts/build-versions.sh build/pages
+	@python3 website/scripts/check-links.py build/pages
 
 # Serve the Funnel website on http://localhost:1313
 website-dev: website
@@ -257,4 +262,4 @@ website-dev: website
 clean:
 	@rm -rf ./bin ./pkg ./test_tmp ./build ./buildtools
 
-.PHONY: proto proto-lint website docker webdash build debug
+.PHONY: proto proto-lint website website-versions docker webdash build debug
