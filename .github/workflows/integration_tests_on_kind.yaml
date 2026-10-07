@@ -11,6 +11,8 @@ permissions:
 jobs:
   integration_tests:
     name: Integration tests
+    # Runs uc-cdis Gen3 CI against the ohsu-comp-bio Quay image; only meaningful in the upstream repo
+    if: github.repository == 'calypr/funnel'
     uses: uc-cdis/.github/.github/workflows/integration_tests.yaml@master
     with:
       QUAY_ORG: ohsu-comp-bio

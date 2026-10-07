@@ -16,6 +16,8 @@ env:
 
 jobs:
   build:
+    # Pushes to quay.io/ohsu-comp-bio using upstream-only secrets; forks publish via git-tag.yaml (ghcr.io)
+    if: github.repository == 'calypr/funnel'
     strategy:
       fail-fast: false
       matrix:
