@@ -24,7 +24,7 @@ build the binary from source if you need one. Before deploying, read the
 |---|---|
 | Image | `ghcr.io/cerit-sc/funnel-gdi:<version>` |
 | Platforms | linux/amd64, linux/arm64 |
-| Versions | [package page](https://github.com/CERIT-SC/funnel-gdi/pkgs/container/funnel-gdi), [Releases](https://github.com/CERIT-SC/funnel-gdi/releases), [Changelog](/gdi/changelog/) |
+| Versions | [package page](https://github.com/CERIT-SC/funnel-gdi/pkgs/container/funnel-gdi), [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) (release notes) |
 
 This documentation describes version **{{< gdi-version >}}**. Use the image
 with the same version as the documentation you follow.

@@ -24,8 +24,7 @@
 **Documentation version: 0.12.2.1 (unreleased)** — this documentation describes funnel-gdi
 0.12.2.1. For another version, open the repository at the matching git tag
 (e.g. `https://github.com/CERIT-SC/funnel-gdi/tree/0.11.3.1`) or follow the
-docs links in [CHANGELOG-GDI.md](CHANGELOG-GDI.md) and on the
-[Releases](https://github.com/CERIT-SC/funnel-gdi/releases) page.
+docs links on the [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) page.
 A running server reports its version at `GET /v1/service-info`.
 
 **Documentation website:** https://cerit-sc.github.io/funnel-gdi/ — one copy per
@@ -53,7 +52,7 @@ Per-task storage modes on Kubernetes (`shared` / `pvc` / `full`) with a Helm cha
 | Document | Contents |
 |---|---|
 | [DEPLOYMENT.md](DEPLOYMENT.md) | How to deploy (local binary, Kubernetes, Docker), system requirements, supported and tested platforms, upgrade and rollback, production checklist |
-| [CHANGELOG-GDI.md](CHANGELOG-GDI.md) | Changes per GDI version, with links to the docs of each release |
+| [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) | Changes per GDI version (release notes), with links to the docs of each release |
 | [GDI-FEATURES.md](GDI-FEATURES.md) | What the fork adds on top of upstream and how to keep it in sync |
 | [RELEASING.md](RELEASING.md) | Release policy (versioning, when releases are made, support, compatibility) and the release checklist |
 | [SECURITY.md](SECURITY.md) | Supported versions and reporting security issues |

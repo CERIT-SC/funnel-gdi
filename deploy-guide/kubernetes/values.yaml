@@ -4,8 +4,8 @@
 # Everything else works as-is for a first try on a test namespace.
 
 # Image used for the server Deployment and for every per-task worker Job:
-# a release image ghcr.io/cerit-sc/funnel-gdi:<version> (see CHANGELOG-GDI.md;
-# use the version matching appVersion in Chart.yaml), or an image you built
+# a release image ghcr.io/cerit-sc/funnel-gdi:<version> (see the GitHub
+# Releases page; use the version matching appVersion in Chart.yaml), or an image you built
 # and pushed from the repo root (see DEPLOYMENT.md).
 image: <registry>/<registry-user>/funnel-gdi:<tag>
 

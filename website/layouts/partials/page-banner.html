@@ -1,0 +1,20 @@
+{{/* Tells readers how a page relates to the GDI fork:
+     - gdi: true             page written for the GDI fork, no banner
+     - gdi_support: unsupported  backend never tested in the GDI fork
+     - otherwise             upstream reference page */}}
+{{ $platforms := printf "%sgdi/deployment/#supported-and-tested-platforms" .Site.BaseURL }}
+{{ if .Params.gdi }}
+{{ else if eq .Params.gdi_support "unsupported" }}
+<div class="gdi-banner gdi-banner-unsupported">
+  <strong>Not supported in the GDI fork.</strong> This page is upstream Funnel
+  documentation; this backend is inherited from upstream and has never been
+  tested in funnel-gdi. See <a href="{{ $platforms }}">Supported and tested platforms</a>.
+</div>
+{{ else }}
+<div class="gdi-banner">
+  <strong>Upstream reference.</strong> This page comes from the upstream Funnel
+  documentation. What the GDI fork supports and tests is listed in
+  <a href="{{ $platforms }}">Supported and tested platforms</a>; how to deploy
+  it is in the <a href="{{ .Site.BaseURL }}gdi/deployment/">Deployment guide</a>.
+</div>
+{{ end }}

@@ -5,7 +5,7 @@
 Which releases get fixes is defined by the [release policy](RELEASING.md#support):
 the latest release gets bug and security fixes; the previous release, if it
 has a different upstream base, gets security fixes for 3 months after the
-latest release is published. See [CHANGELOG-GDI.md](CHANGELOG-GDI.md) for the
+latest release is published. See the [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) page for the
 list of releases.
 
 | Version     | Supported                                                                 |

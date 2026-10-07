@@ -1,0 +1,86 @@
+name: Documentation site
+
+# Builds and publishes https://cerit-sc.github.io/funnel-gdi/ :
+#   <version>/ for every release tag X.Y.Z.N, latest/ for the newest release
+#   and dev/ for master-gdi (see website/scripts/build-versions.sh).
+# Every run rebuilds all versions, so the site always matches the repository.
+#
+# Repository settings needed once:
+#   Settings -> Pages -> Source: GitHub Actions
+#   Settings -> Environments -> github-pages -> Deployment branches and tags:
+#     allow the branch "master-gdi" and tags matching "*.*.*.*"
+on:
+  push:
+    branches:
+      - master-gdi
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a newer run waits instead of cancelling a deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: 0.166.0
+    steps:
+      - name: Check out code (all branches and tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go (for Hugo modules)
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: website/go.mod
+          cache: false
+
+      - name: Set up Node.js (for the search index)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Hugo
+        run: |
+          wget -q -O "$RUNNER_TEMP/hugo.deb" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb"
+          sudo dpkg -i "$RUNNER_TEMP/hugo.deb"
+          hugo version
+
+      - name: Build all documentation versions
+        env:
+          # dev/ always shows master-gdi, also when a release tag triggers the run.
+          DEV_REF: origin/master-gdi
+        run: website/scripts/build-versions.sh build/pages
+
+      - name: Check links
+        run: python3 website/scripts/check-links.py build/pages
+
+      - name: Set up Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

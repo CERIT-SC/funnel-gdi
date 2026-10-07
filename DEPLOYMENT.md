@@ -2,7 +2,7 @@
 
 # Funnel Deployment Guide
 
-**Documentation version: 0.12.2.1 (unreleased)** — applies to funnel-gdi 0.12.2.1. For another version, open this file at the matching git tag (e.g. [`0.11.3.1`](https://github.com/CERIT-SC/funnel-gdi/tree/0.11.3.1)); every release in [CHANGELOG-GDI.md](CHANGELOG-GDI.md) links to its docs.
+**Documentation version: 0.12.2.1 (unreleased)** — applies to funnel-gdi 0.12.2.1. For another version, open this file at the matching git tag (e.g. [`0.11.3.1`](https://github.com/CERIT-SC/funnel-gdi/tree/0.11.3.1)); every release on the [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) page links to its docs.
 
 This guide is also published, per version, at https://cerit-sc.github.io/funnel-gdi/. Run every command in this guide from the repository root.
 
@@ -291,7 +291,7 @@ curl -s -X POST http://localhost:8000/v1/tasks \
 
 ## Upgrade and rollback
 
-Read the [CHANGELOG-GDI.md](CHANGELOG-GDI.md) entries between your version and the new one first — a new upstream base can change the config format.
+Read the release notes on the [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) page between your version and the new one first — a new upstream base can change the config format.
 
 | Action | Kubernetes | Local binary / Docker |
 |---|---|---|
