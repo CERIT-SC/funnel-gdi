@@ -4,11 +4,11 @@
 [![GitHub Release][release-badge]][release]
 [![Docker][docker-badge]][docker]
 
-[tests-badge]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/tests.yaml/badge.svg?branch=master-gdi
+[tests-badge]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/tests.yaml/badge.svg?branch=master
 [tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/tests.yaml
 
 [compliance-tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/compliance.yaml
-[compliance-tests-badge]: https://img.shields.io/github/actions/workflow/status/CERIT-SC/funnel-gdi/compliance.yaml?branch=master-gdi&label=TES%20Compliance
+[compliance-tests-badge]: https://img.shields.io/github/actions/workflow/status/CERIT-SC/funnel-gdi/compliance.yaml?branch=master&label=TES%20Compliance
 
 [license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
 [license]: https://opensource.org/licenses/MIT
@@ -28,7 +28,7 @@ docs links on the [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) pa
 A running server reports its version at `GET /v1/service-info`.
 
 **Documentation website:** https://cerit-sc.github.io/funnel-gdi/ — one copy per
-release (`/<version>/`), `/latest/` and `/dev/` (`master-gdi`), built from the
+release (`/<version>/`), `/latest/` and `/dev/` (`master`), built from the
 documents in this repository.
 
 This is the [GDI](https://gdi.onemilliongenomes.eu/) fork of

@@ -2,17 +2,17 @@ name: Documentation site
 
 # Builds and publishes https://cerit-sc.github.io/funnel-gdi/ :
 #   <version>/ for every release tag X.Y.Z.N, latest/ for the newest release
-#   and dev/ for master-gdi (see website/scripts/build-versions.sh).
+#   and dev/ for master (see website/scripts/build-versions.sh).
 # Every run rebuilds all versions, so the site always matches the repository.
 #
 # Repository settings needed once:
 #   Settings -> Pages -> Source: GitHub Actions
 #   Settings -> Environments -> github-pages -> Deployment branches and tags:
-#     allow the branch "master-gdi" and tags matching "*.*.*.*"
+#     allow the branch "master" and tags matching "*.*.*.*"
 on:
   push:
     branches:
-      - master-gdi
+      - master
     tags:
       - "[0-9]+.[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
@@ -56,8 +56,8 @@ jobs:
 
       - name: Build all documentation versions
         env:
-          # dev/ always shows master-gdi, also when a release tag triggers the run.
-          DEV_REF: origin/master-gdi
+          # dev/ always shows master, also when a release tag triggers the run.
+          DEV_REF: origin/master
         run: website/scripts/build-versions.sh build/pages
 
       - name: Check links

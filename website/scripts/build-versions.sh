@@ -3,7 +3,7 @@
 #
 #   <out>/<version>/   every release tag X.Y.Z.N that contains the website tooling
 #   <out>/latest/      the newest of those releases
-#   <out>/dev/         the development version (DEV_REF, default HEAD = master-gdi)
+#   <out>/dev/         the development version (DEV_REF, default HEAD = master)
 #   <out>/versions.json  the list the version switcher reads
 #   <out>/index.html     redirects to latest/ (or dev/ before the first release)
 #
@@ -64,7 +64,7 @@ if [ "${DEV_ONLY:-0}" = 1 ]; then
   releases=()
 fi
 
-build "$dev_ref" dev dev master-gdi
+build "$dev_ref" dev dev master
 for tag in ${releases[@]+"${releases[@]}"}; do
   build "$tag" "$tag" "$tag" "$tag"
 done

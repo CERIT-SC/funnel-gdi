@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - develop
-      - master-gdi
+      - master
   # Allows manual runs from the Actions tab
   workflow_dispatch:
 

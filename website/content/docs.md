@@ -74,8 +74,8 @@ See [Deploying a cluster](/docs/compute/deployment/) for more information about 
 The node is accessible via the `funnel node` command and the [scheduler package][schedpkg].
 
 [tes]: https://github.com/ga4gh/task-execution-schemas
-[serverpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/server
-[workerpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/worker
-[schedpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/compute/scheduler
-[tespkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/tes
-[storagepkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master-gdi/storage
+[serverpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master/server
+[workerpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master/worker
+[schedpkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master/compute/scheduler
+[tespkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master/tes
+[storagepkg]: https://github.com/CERIT-SC/funnel-gdi/tree/master/storage

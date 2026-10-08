@@ -8,7 +8,7 @@
     <span>
       Documentation for <strong>funnel-gdi {{ $version }}</strong>
       {{ if eq $version "dev" }}
-        — development version (<code>{{ $build.ref | default "master-gdi" }}</code>{{ with $build.commit }} @ <code>{{ . }}</code>{{ end }}), may describe unreleased changes
+        — development version (<code>{{ $build.ref | default "master" }}</code>{{ with $build.commit }} @ <code>{{ . }}</code>{{ end }}), may describe unreleased changes
       {{ end }}
       {{ with $build.date }}<span class="version-bar-date">· built {{ . }}</span>{{ end }}
     </span>
