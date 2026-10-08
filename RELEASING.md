@@ -12,7 +12,7 @@ This document defines how funnel-gdi is versioned, released and supported
 | Format | `X.Y.Z.N`, without a `v` prefix, e.g. `0.12.2.1` |
 | `X.Y.Z` | The upstream Funnel release the fork is based on (stated in the release notes of each version). The only exception is `0.11.2.1`, released before this rule, which is based on upstream 0.11.1. |
 | `N` | The GDI revision on that upstream base, starting at `1`; it starts again at `1` after merging a newer upstream release |
-| Tags | One git tag per release, created on `master-gdi`. Release tags are never moved or deleted. |
+| Tags | One git tag per release, created on `master`. Release tags are never moved or deleted. |
 | Pre-releases | Not used. Test images are published under other tag names (manual run of the `Git Tag` workflow, e.g. `manual-test`). |
 
 ### When a release is made
@@ -21,12 +21,12 @@ Releases are made **on demand**:
 
 | Trigger | Release |
 |---|---|
-| Changes on `master-gdi` are ready to be deployed | Next GDI revision `X.Y.Z.(N+1)` |
+| Changes on `master` are ready to be deployed | Next GDI revision `X.Y.Z.(N+1)` |
 | A newer upstream release has been merged | `X'.Y'.Z'.1` on the new upstream base |
 | A security vulnerability is fixed | As soon as possible, as the next revision of every supported release line (see [Support](#support)) |
 
 Releases are made by maintainers of `CERIT-SC/funnel-gdi` with write access.
-The release changes go to `master-gdi` through a reviewed pull request.
+The release changes go to `master` through a reviewed pull request.
 
 ### Release criteria
 
@@ -34,7 +34,7 @@ A version is released only when all of these hold:
 
 | Criterion | Checked by |
 |---|---|
-| CI is green on `master-gdi`: unit tests, TES compliance, Nextflow, documentation site build and links | GitHub Actions |
+| CI is green on `master`: unit tests, TES compliance, Nextflow, documentation site build and links | GitHub Actions |
 | `README.md` and `DEPLOYMENT.md` name the version, the Helm chart's `appVersion` matches | `scripts/check-docs-version.sh`, run again by the `Git Tag` workflow, which stops the release otherwise |
 | The documentation has been reviewed against the changes | [Checklist](#release-checklist), step 3 |
 | The platforms listed as "Tested" in `DEPLOYMENT.md` have been re-tested for this version | [Checklist](#release-checklist), step 4 |
@@ -104,7 +104,7 @@ release notes.
      If the dashboard bundle changed, check its minimum Chrome version with
      `npx es-check` on `/static/js/main.*.js`.
 5. **Check.** `scripts/check-docs-version.sh X.Y.Z.N` must pass.
-6. **Merge** the release changes to `master-gdi`.
+6. **Merge** the release changes to `master`.
 7. **Tag and push.**
    ```bash
    git tag X.Y.Z.N
@@ -133,7 +133,7 @@ It needs, once (repository admin):
 
 - *Settings → Pages → Build and deployment → Source:* **GitHub Actions**.
 - *Settings → Environments → github-pages → Deployment branches and tags:*
-  allow the branch `master-gdi` and tags matching `*.*.*.*`.
+  allow the branch `master` and tags matching `*.*.*.*`.
 
 Then run the `Documentation site` workflow manually once (or push to
-`master-gdi`) to publish `dev/`.
+`master`) to publish `dev/`.

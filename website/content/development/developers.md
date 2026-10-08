@@ -23,7 +23,7 @@ fork adds to upstream Funnel and how to keep it in sync, see
 ```shell
 git clone https://github.com/CERIT-SC/funnel-gdi.git
 cd funnel-gdi
-git checkout master-gdi    # development branch; or a release tag X.Y.Z.N
+git checkout master        # development branch; or a release tag X.Y.Z.N
 make build                 # builds ./funnel
 ./funnel version
 ```
@@ -66,7 +66,7 @@ scheduler interfaces (`compute/scheduler`).
 ## Making a release
 
 Releases of funnel-gdi follow the [Release policy](/gdi/release-policy/) and
-its release checklist: `X.Y.Z.N` tags on `master-gdi`, a container image on
+its release checklist: `X.Y.Z.N` tags on `master`, a container image on
 `ghcr.io/cerit-sc/funnel-gdi` and no prebuilt binaries. The upstream release
 process (`make release`, goreleaser, Homebrew) is not used in the fork.
 

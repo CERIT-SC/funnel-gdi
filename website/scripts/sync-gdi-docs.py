@@ -14,7 +14,7 @@ the layouts show on every page.
 
 Usage: sync-gdi-docs.py [--version VERSION] [--ref REF]
   VERSION  shown on the website, e.g. 0.12.2.1 or "dev" (default: dev)
-  REF      git ref for links to GitHub, e.g. 0.12.2.1 (default: master-gdi)
+  REF      git ref for links to GitHub, e.g. 0.12.2.1 (default: master)
 """
 
 import argparse
@@ -88,7 +88,7 @@ def git(*args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--version", default="dev")
-    parser.add_argument("--ref", default="master-gdi")
+    parser.add_argument("--ref", default="master")
     args = parser.parse_args()
 
     os.makedirs(CONTENT, exist_ok=True)

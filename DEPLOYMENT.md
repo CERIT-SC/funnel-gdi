@@ -89,7 +89,7 @@ Values for Kubernetes are the chart defaults in [`values.yaml`](deploy-guide/kub
 |---|---|---|
 | Unit tests | All packages (`go test ./...`) | Every push |
 | TES API compliance | TES 1.0.0 and 1.1.0, with BoltDB, local compute, local storage | Every push |
-| Workflow engine | Nextflow | Pushes to `master-gdi` |
+| Workflow engine | Nextflow | Pushes to `master` |
 
 **Built, but not tested**
 
