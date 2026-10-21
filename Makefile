@@ -64,20 +64,16 @@ tidy:
 	@find . \( -path ./vendor -o -path ./webdash/node_modules -o -path ./venv -o -path ./.git \) -prune -o -type f -print | grep -v "\.pb\." | grep -v "web.go" | grep -E '.*\.go$$' | xargs goimports -w
 	@find . \( -path ./vendor -o -path ./webdash/node_modules -o -path ./venv -o -path ./.git \) -prune -o -type f -print | grep -v "\.pb\." | grep -v "web.go" | grep -E '.*\.go$$' | xargs gofmt -w -s
 
-lint-depends:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
-	go install golang.org/x/tools/cmd/goimports
+# golangci-lint must run with the Go version from go.mod (as in CI): newer Go
+# versions write export data that golangci-lint v2.11.4 cannot read.
+GO_MOD_VERSION := $(shell awk '/^go /{print $$2}' go.mod)
 
-# Run code style and other checks
+lint-depends:
+	GOTOOLCHAIN=go$(GO_MOD_VERSION) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+
+# Run code style and other checks (configuration in .golangci.yml)
 lint:
-	@golangci-lint run --timeout 3m --disable-all --enable=vet --enable=golint --enable=gofmt --enable=goimports --enable=misspell \
-		--skip-dirs "vendor" \
-		--skip-dirs "webdash" \
-		--skip-dirs "cmd/webdash" \
-		--skip-dirs "funnel-work-dir" \
-		-e '.*bundle.go' -e ".*pb.go" -e ".*pb.gw.go" \
-		./...
-	@golangci-lint run --timeout 3m --disable-all --enable=vet --enable=gofmt --enable=goimports --enable=misspell ./cmd/termdash/...
+	@GOTOOLCHAIN=go$(GO_MOD_VERSION) golangci-lint run --timeout 5m ./...
 
 # Run all tests
 test:
