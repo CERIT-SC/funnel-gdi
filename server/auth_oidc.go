@@ -12,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
@@ -134,15 +136,15 @@ func (c *OidcConfig) HandleAuthCode(w http.ResponseWriter, req *http.Request) {
 		c.RedirectToLogin(w, req)
 		return
 	} else if state != c.computeState(req) {
-		msg := "Unexpected value in the 'state' query-parameter."
-		http.Error(w, msg, http.StatusBadRequest)
+		http.Error(w, errcodes.Message("FUNNEL-AUTH-005"), http.StatusBadRequest)
 		return
 	}
 
 	errorCode := req.FormValue("error")
 	errorDesc := req.FormValue("error_description")
 	if errorCode != "" && errorDesc != "" {
-		msg := "OIDC authentication flow failed [" + errorCode + "]: " + errorDesc
+		// Both values come from the request: shorten them before echoing.
+		msg := errcodes.Message("FUNNEL-AUTH-006", truncate(errorCode, 100), truncate(errorDesc, 300))
 		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
@@ -155,8 +157,7 @@ func (c *OidcConfig) HandleAuthCode(w http.ResponseWriter, req *http.Request) {
 
 	token, err := c.oauth2.Exchange(context.Background(), code)
 	if err != nil {
-		msg := "Failed to receive a JWT for the authorization code: " + err.Error()
-		http.Error(w, msg, http.StatusInternalServerError)
+		http.Error(w, errcodes.Message("FUNNEL-AUTH-007", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
@@ -415,4 +416,16 @@ func fetchJson(url *url.URL) []byte {
 	}
 
 	return body
+}
+
+// truncate shortens s to at most n bytes (whole UTF-8 characters), marking
+// a cut with "…".
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + "…"
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/plugins/proto"
@@ -206,6 +207,8 @@ func (ts *TaskService) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*t
 	task, err := ts.Read.GetTask(ctx, req)
 	if err == tes.ErrNotFound {
 		err = status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
+	} else if err == tes.ErrNotPermitted {
+		err = errcodes.Status(codes.PermissionDenied, "FUNNEL-AUTH-008", req.Id)
 	}
 	return task, err
 }
@@ -242,6 +245,8 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 	})
 	if err == tes.ErrNotFound {
 		return result, status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
+	} else if err == tes.ErrNotPermitted {
+		return result, errcodes.Status(codes.PermissionDenied, "FUNNEL-AUTH-008", req.Id)
 	} else if err != nil {
 		return result, err
 	}
@@ -265,7 +270,7 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 	if err == tes.ErrNotFound {
 		return result, status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
 	} else if err == tes.ErrNotPermitted {
-		return result, status.Errorf(codes.PermissionDenied, "%v: taskID: %s", err.Error(), req.Id)
+		return result, errcodes.Status(codes.PermissionDenied, "FUNNEL-AUTH-008", req.Id)
 	} else if err != nil {
 		return result, err
 	}

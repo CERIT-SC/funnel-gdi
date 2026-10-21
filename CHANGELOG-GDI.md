@@ -14,7 +14,7 @@ is based on, `N` is the GDI revision on top of it.
 
 ### Added
 
-- Error codes: API errors can carry a stable code (`FUNNEL-<AREA>-<NNN>: <message>`), with the messages kept in a catalog file (`errcodes/messages.en.yaml`) ready for translation. Reference page *Docs → Error codes* on the website.
+- Error codes: API errors can carry a stable code (`FUNNEL-<AREA>-<NNN>: <message>`), with the messages kept in a catalog file (`errcodes/messages.en.yaml`) ready for translation. Reference page *Docs → Error codes* on the website. Authentication and access errors use the codes `FUNNEL-AUTH-001`…`008`.
 - Postgres database: the schema is created and updated by versioned SQL migrations (`database/postgres/migrations/`), applied in order on server start and recorded in a `schema_version` table. Existing databases are adopted without changes. A server refuses to start on a database migrated by a newer Funnel.
 - Deployment guide: "Database migrations" (what happens to BoltDB and PostgreSQL on upgrade, how to back up and restore before an upgrade or rollback). `install.sh` and the `deployments/` scripts are marked as upstream and not supported.
 - "Troubleshooting for users" in the deployment guide: what each task state means, how to read a task's logs, and common problems with their causes and fixes. "Getting help" explains where to ask (GitHub issues with templates for bugs and questions) and what to include.
@@ -27,6 +27,8 @@ is based on, `N` is the GDI revision on top of it.
 
 ### Fixed
 
+- Reading or canceling another user's task (with `Server.TaskAccess: Owner` or `OwnerOrAdmin`) returned HTTP 500 instead of 403 Forbidden.
+- The OIDC login echoed the identity provider's error description without a length limit; it is now shortened.
 - The backend test targets (`make test-<backend>`) crashed before running any test: the test configuration lost all defaults when a `-funnel-config` file was given, and lists from the file (e.g. `MongoDB.Addrs`) were appended to the defaults instead of replacing them. The MongoDB metrics test failed with the current Prometheus client library. A storage backend could not be enabled by a test config file (`Disabled: false`), so the S3 and FTP storage tests were skipped.
 - The FTP test server image is built from `tests/ftp-test-server/Dockerfile`; the published image is no longer available.
 - S3 tests use versitygw (`make start-s3`) because MinIO no longer publishes its images; `tests/amazoncli-minio-s3.config.yml` was updated to the current `AmazonS3.AWSConfig` keys.

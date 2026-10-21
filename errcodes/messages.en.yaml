@@ -12,3 +12,13 @@
 #     with the same codes and translated messages.
 
 FUNNEL-GEN-000: "internal error (unknown code %s)"
+
+# Authentication and access (server/auth.go, server/auth_oidc.go)
+FUNNEL-AUTH-001: "Missing metadata in the context"
+FUNNEL-AUTH-002: "Basic/Bearer authorization token missing"
+FUNNEL-AUTH-003: "Basic-authentication failed"
+FUNNEL-AUTH-004: "Bearer authorization token not accepted"
+FUNNEL-AUTH-005: "Unexpected value in the 'state' query-parameter"
+FUNNEL-AUTH-006: "OIDC authentication flow failed [%s]: %s"
+FUNNEL-AUTH-007: "Failed to receive a JWT for the authorization code: %s"
+FUNNEL-AUTH-008: "permission denied: taskID: %s"
