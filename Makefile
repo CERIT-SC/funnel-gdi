@@ -92,13 +92,17 @@ test-coverage:
 test-verbose:
 	@go test -v $(TESTS)
 
+# Coverage for the backend test targets (test-<backend>): with COVER_DIR set,
+# each go test run writes <COVER_DIR>/<name>.out with coverage of all packages.
+cover_flags = $(if $(COVER_DIR),-coverpkg=./... -coverprofile=$(abspath $(COVER_DIR))/$(1).out)
+
 start-elasticsearch:
 	@docker rm -f funnel-es-test > /dev/null 2>&1 || echo
 	@docker run -d --name funnel-es-test -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" -e "xpack.security.enabled=false" docker.io/elastic/elasticsearch:8.17.1 > /dev/null
 
 test-elasticsearch:
-	@go test ./tests/core/ -funnel-config `pwd`/tests/elastic.config.yml
-	@go test ./tests/scheduler/ -funnel-config `pwd`/tests/elastic.config.yml
+	@go test $(call cover_flags,elasticsearch-core) ./tests/core/ -funnel-config `pwd`/tests/elastic.config.yml
+	@go test $(call cover_flags,elasticsearch-scheduler) ./tests/scheduler/ -funnel-config `pwd`/tests/elastic.config.yml
 
 start-mongodb:
 	@docker rm -f funnel-mongodb-test > /dev/null 2>&1 || echo
@@ -106,8 +110,8 @@ start-mongodb:
 
 test-mongodb:
 	@go version
-	@go test ./tests/core/ --funnel-config `pwd`/tests/mongo.config.yml
-	@go test ./tests/scheduler/ --funnel-config `pwd`/tests/mongo.config.yml
+	@go test $(call cover_flags,mongodb-core) ./tests/core/ --funnel-config `pwd`/tests/mongo.config.yml
+	@go test $(call cover_flags,mongodb-scheduler) ./tests/scheduler/ --funnel-config `pwd`/tests/mongo.config.yml
 
 start-postgres:
 	@docker rm -f funnel-postgres-test > /dev/null 2>&1 || echo
@@ -117,19 +121,19 @@ start-postgres:
 
 test-postgres:
 	@go version
-	@go test ./tests/core/ --funnel-config `pwd`/tests/postgres.config.yml
-	@go test ./tests/scheduler/ --funnel-config `pwd`/tests/postgres.config.yml
+	@go test $(call cover_flags,postgres-core) ./tests/core/ --funnel-config `pwd`/tests/postgres.config.yml
+	@go test $(call cover_flags,postgres-scheduler) ./tests/scheduler/ --funnel-config `pwd`/tests/postgres.config.yml
 
 test-badger:
 	@go version
-	@go test ./tests/core/ -funnel-config `pwd`/tests/badger.config.yml
+	@go test $(call cover_flags,badger-core) ./tests/core/ -funnel-config `pwd`/tests/badger.config.yml
 
 start-dynamodb:
 	@docker rm -f funnel-dynamodb-test > /dev/null 2>&1 || echo
 	@docker run -d --name funnel-dynamodb-test -p 18000:8000 docker.io/amazon/dynamodb-local > /dev/null
 
 test-dynamodb:
-	@go test ./tests/core/ -funnel-config `pwd`/tests/dynamo.config.yml
+	@go test $(call cover_flags,dynamodb-core) ./tests/core/ -funnel-config `pwd`/tests/dynamo.config.yml
 
 start-datastore:
 	@docker rm -f funnel-datastore-test > /dev/null 2>&1 || echo
@@ -137,34 +141,34 @@ start-datastore:
 
 test-datastore:
 	DATASTORE_EMULATOR_HOST=localhost:12432 \
-	go test ./tests/core/ -funnel-config `pwd`/tests/datastore.config.yml
+	go test $(call cover_flags,datastore-core) ./tests/core/ -funnel-config `pwd`/tests/datastore.config.yml
 
 start-kafka:
 	@docker rm -f funnel-kafka > /dev/null 2>&1 || echo
 	@docker run -d --name funnel-kafka -p 2181:2181 -p 9092:9092 --env ADVERTISED_HOST="localhost" --env ADVERTISED_PORT=9092 spotify/kafka
 
 test-kafka:
-	@go test ./tests/kafka/ -funnel-config `pwd`/tests/kafka.config.yml
+	@go test $(call cover_flags,kafka-kafka) ./tests/kafka/ -funnel-config `pwd`/tests/kafka.config.yml
 
 test-htcondor:
 	@docker pull ohsucompbio/htcondor
-	@go test -timeout 120s ./tests/htcondor -funnel-config `pwd`/tests/htcondor.config.yml
+	@go test $(call cover_flags,htcondor-htcondor) -timeout 120s ./tests/htcondor -funnel-config `pwd`/tests/htcondor.config.yml
 
 test-slurm:
 	@go version
 	@docker pull quay.io/ohsu-comp-bio/slurm
-	@go test -timeout 120s ./tests/slurm -funnel-config `pwd`/tests/slurm.config.yml
+	@go test $(call cover_flags,slurm-slurm) -timeout 120s ./tests/slurm -funnel-config `pwd`/tests/slurm.config.yml
 
 test-gridengine:
 	@docker pull ohsucompbio/gridengine
-	@go test -timeout 120s ./tests/gridengine -funnel-config `pwd`/tests/gridengine.config.yml
+	@go test $(call cover_flags,gridengine-gridengine) -timeout 120s ./tests/gridengine -funnel-config `pwd`/tests/gridengine.config.yml
 
 test-pbs-torque:
 	@docker pull ohsucompbio/pbs-torque
-	@go test -timeout 120s ./tests/pbs -funnel-config `pwd`/tests/pbs.config.yml
+	@go test $(call cover_flags,pbs-torque-pbs) -timeout 120s ./tests/pbs -funnel-config `pwd`/tests/pbs.config.yml
 
 test-amazon-s3:
-	@go test -v ./tests/storage -funnel-config `pwd`/tests/s3.config.yml -run TestAmazonS3
+	@go test $(call cover_flags,amazon-s3-storage) -v ./tests/storage -funnel-config `pwd`/tests/s3.config.yml -run TestAmazonS3
 
 start-generic-s3:
 	@docker rm -f funnel-s3server > /dev/null 2>&1 || echo
@@ -173,16 +177,16 @@ start-generic-s3:
 	@docker run -d --name funnel-minio -p 9000:9000 -e "MINIO_ACCESS_KEY=fakekey" -e "MINIO_SECRET_KEY=fakesecret" -e "MINIO_REGION=us-east-1" quay.io/minio/minio server /data
 
 test-generic-s3:
-	@go test -v ./tests/storage -funnel-config `pwd`/tests/amazoncli-minio-s3.config.yml -run TestAmazonS3Storage
-	@go test -v ./tests/storage -funnel-config `pwd`/tests/scality-s3.config.yml -run TestGenericS3Storage
-	@go test -v ./tests/storage -funnel-config `pwd`/tests/minio-s3.config.yml -run TestGenericS3Storage
-	@go test -v ./tests/storage -funnel-config `pwd`/tests/multi-s3.config.yml -run TestGenericS3Storage
+	@go test $(call cover_flags,generic-s3-amazoncli-minio-s3) -v ./tests/storage -funnel-config `pwd`/tests/amazoncli-minio-s3.config.yml -run TestAmazonS3Storage
+	@go test $(call cover_flags,generic-s3-scality-s3) -v ./tests/storage -funnel-config `pwd`/tests/scality-s3.config.yml -run TestGenericS3Storage
+	@go test $(call cover_flags,generic-s3-minio-s3) -v ./tests/storage -funnel-config `pwd`/tests/minio-s3.config.yml -run TestGenericS3Storage
+	@go test $(call cover_flags,generic-s3-multi-s3) -v ./tests/storage -funnel-config `pwd`/tests/multi-s3.config.yml -run TestGenericS3Storage
 
 test-gs:
-	@go test ./tests/storage -run TestGoogleStorage -funnel-config `pwd`/tests/gs.config.yml ${GCE_PROJECT_ID}
+	@go test $(call cover_flags,gs-storage) ./tests/storage -run TestGoogleStorage -funnel-config `pwd`/tests/gs.config.yml ${GCE_PROJECT_ID}
 
 test-swift:
-	@go test ./tests/storage -funnel-config `pwd`/tests/swift.config.yml -run TestSwiftStorage
+	@go test $(call cover_flags,swift-storage) ./tests/storage -funnel-config `pwd`/tests/swift.config.yml -run TestSwiftStorage
 
 start-pubsub:
 	@docker rm -f funnel-pubsub-test > /dev/null 2>&1 || echo
@@ -190,13 +194,13 @@ start-pubsub:
 
 test-pubsub:
 	@PUBSUB_EMULATOR_HOST=localhost:8085 \
-	go test ./tests/pubsub/ -funnel-config `pwd`/tests/pubsub.config.yml
+	go test $(call cover_flags,pubsub-pubsub) ./tests/pubsub/ -funnel-config `pwd`/tests/pubsub.config.yml
 
 start-ftp:
 	@cd tests/ftp-test-server/ && ./start-server.sh
 
 test-ftp:
-	@go test -v ./tests/storage -run TestFTPStorage -funnel-config `pwd`/tests/ftp.config.yml
+	@go test $(call cover_flags,ftp-storage) -v ./tests/storage -run TestFTPStorage -funnel-config `pwd`/tests/ftp.config.yml
 
 # Build the web dashboard
 webdash: webdash-deps

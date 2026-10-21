@@ -14,7 +14,7 @@ versioning and the release checklist in [RELEASING.md](RELEASING.md).
 | `go build ./...` | Compile everything |
 | `make test` | `go test` on all packages. The Postgres tests use testcontainers and need a running Docker. |
 | `make test-coverage` | `make test` with `-coverpkg=./...`, then `scripts/coverage` prints coverage per package (`build/coverage/merged.out`); `COVERAGE_MIN=<percent>` fails below it. Generated code and `tests/` helpers are not counted. |
-| `make test-<backend>` | Component tests against a real backend (`start-<backend>` starts its container first), e.g. `make start-postgres test-postgres` |
+| `make test-<backend>` | Component tests against a real backend (`start-<backend>` starts its container first), e.g. `make start-postgres test-postgres`. `COVER_DIR=<dir>` writes a coverage profile per test run into `<dir>`. |
 | `make website-versions` | Build the documentation site (Hugo) and check its links. Needs `hugo`. |
 | `make build` | Build the `funnel` binary |
 
@@ -29,7 +29,7 @@ Run after every change, in this order:
 3. `make test`
 4. For changes to documentation (`*.md`, `website/`): `make website-versions`
 
-CI (`.github/workflows/tests.yaml`) runs the same tests with `-coverpkg=./...`, writes the per-package coverage to the job summary, uploads the profiles and an HTML report (artifact `unit-coverage`) and fails below `COVERAGE_MIN`.
+CI (`.github/workflows/tests.yaml`) runs the same tests with `-coverpkg=./...` (job `unitTest`), the backend component tests (job `backendTests`: `make start-<backend> test-<backend> COVER_DIR=…` for postgres, mongodb, elasticsearch, badger, dynamodb, datastore, kafka, pubsub, generic-s3, ftp) and merges their coverage (job `coverage`): per-package report in the job summary, artifact `coverage` with the merged profile and an HTML report, and a failure below `COVERAGE_MIN`.
 
 Changes to `.github/workflows/*` can only be verified by a CI run (push a branch / open a PR); check the YAML locally by running the commands the workflow runs.
 

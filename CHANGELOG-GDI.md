@@ -14,4 +14,9 @@ is based on, `N` is the GDI revision on top of it.
 
 ### Added
 
-- CI reports the statement coverage of the unit and component tests per package (job summary and the `unit-coverage` artifact with an HTML report) and fails when it drops below the minimum `COVERAGE_MIN`. Run `make test-coverage` for the same report locally.
+- CI reports the statement coverage of the unit and component tests per package (job summary and the `coverage` artifact with an HTML report) and fails when it drops below the minimum `COVERAGE_MIN`. Run `make test-coverage` for the same report locally.
+- CI runs the component tests against real databases, event streams and storage (Postgres, MongoDB, Elasticsearch, Badger, DynamoDB local, Datastore and Pub/Sub emulators, Kafka, S3-compatible storage, FTP); their coverage counts toward the total.
+
+### Fixed
+
+- The backend test targets (`make test-<backend>`) crashed before running any test: the test configuration lost all defaults when a `-funnel-config` file was given, and lists from the file (e.g. `MongoDB.Addrs`) were appended to the defaults instead of replacing them. The MongoDB metrics test failed with the current Prometheus client library.
