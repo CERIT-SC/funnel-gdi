@@ -79,6 +79,16 @@ lint:
 test:
 	@go test $(TESTS)
 
+# Run all tests with coverage of every package (-coverpkg, so the end-to-end
+# tests in tests/ count for the code they exercise) and report it per package
+# (scripts/coverage). Set COVERAGE_MIN to fail below a percentage.
+COVERAGE_DIR ?= build/coverage
+COVERAGE_MIN ?= 0
+test-coverage:
+	@mkdir -p $(COVERAGE_DIR)
+	@go test $(TESTS) -coverpkg=./... -coverprofile=$(COVERAGE_DIR)/unit.out
+	@go run ./scripts/coverage -min $(COVERAGE_MIN) -o $(COVERAGE_DIR)/merged.out $(COVERAGE_DIR)/unit.out
+
 test-verbose:
 	@go test -v $(TESTS)
 

@@ -21,6 +21,7 @@ separate PR. Last synced with upstream: `eff51273` (2026-09-02, v0.12.x).
 GDI-only (not meant for upstream):
 
 - `AGENTS.md` – commands, verification chain and invariants for coding agents; `make lint` runs golangci-lint v2 with `.golangci.yml` and the `go.mod` Go version, as CI does.
+- Coverage tooling: `scripts/coverage/` (merges Go coverage profiles, leaves out generated code and `tests/` helpers, per-package report, `-min` gate; tests in `scripts/coverage/main_test.go`), `make test-coverage`.
 - `Dockerfile.dind` – image with Docker CLI for the local/manual worker with the Docker executor.
 - `.github/workflows/git-tag.yaml` – publishes `ghcr.io/<repo>:<tag>` on git tags / manual dispatch; `workflow_dispatch` on CI workflows.
 - `deploy-guide/kubernetes/` + `DEPLOYMENT.md` – Helm chart with `pvcMode` shared (default) / pvc / full; namespaced RBAC only except for `full`.
