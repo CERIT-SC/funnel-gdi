@@ -33,6 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       checks: write
+    env:
+      # Minimum total statement coverage (percent) of the unit and component
+      # tests, without generated code and tests/ helpers (scripts/coverage).
+      # May only be raised (AGENTS.md, INV-11).
+      COVERAGE_MIN: 47
     steps:
     - name: Check out code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -49,8 +54,8 @@ jobs:
       id: unit_tests
       continue-on-error: true
       run: |
-        gotestsum --junitfile=test-report.xml -- ./... -coverprofile=coverage.out
-        go tool cover -func=coverage.out
+        mkdir -p build/coverage
+        gotestsum --junitfile=test-report.xml -- ./... -coverpkg=./... -coverprofile=build/coverage/unit.out
 
     - name: Test Report
       uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
@@ -60,6 +65,28 @@ jobs:
         path: test-report.xml
         reporter: java-junit
 
+    - name: Coverage report
+      id: coverage_report
+      if: always() && hashFiles('build/coverage/unit.out') != ''
+      run: |
+        go run ./scripts/coverage -format markdown -title "Unit and component test coverage" \
+          -o build/coverage/merged.out build/coverage/unit.out | tee -a "$GITHUB_STEP_SUMMARY"
+        go tool cover -html=build/coverage/merged.out -o build/coverage/coverage.html
+
+    - name: Upload coverage
+      if: always() && steps.coverage_report.outcome == 'success'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: unit-coverage
+        path: |
+          build/coverage/unit.out
+          build/coverage/merged.out
+          build/coverage/coverage.html
+
     - name: Fail job if tests failed
       if: steps.unit_tests.outcome == 'failure'
       run: exit 1
+
+    - name: Coverage gate
+      if: always() && steps.coverage_report.outcome == 'success'
+      run: go run ./scripts/coverage -min "$COVERAGE_MIN" build/coverage/merged.out > /dev/null

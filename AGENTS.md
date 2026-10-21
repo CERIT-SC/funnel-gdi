@@ -29,6 +29,8 @@ Run after every change, in this order:
 3. `make test`
 4. For changes to documentation (`*.md`, `website/`): `make website-versions`
 
+CI (`.github/workflows/tests.yaml`) runs the same tests with `-coverpkg=./...`, writes the per-package coverage to the job summary, uploads the profiles and an HTML report (artifact `unit-coverage`) and fails below `COVERAGE_MIN`.
+
 Changes to `.github/workflows/*` can only be verified by a CI run (push a branch / open a PR); check the YAML locally by running the commands the workflow runs.
 
 ## Layout
