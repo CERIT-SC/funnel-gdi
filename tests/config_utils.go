@@ -48,6 +48,21 @@ func DefaultConfig() *config.Config {
 			panic(err)
 		}
 		mergeReplacingLists(conf.ProtoReflect(), proto.Clone(fileConf).ProtoReflect())
+
+		// "Disabled: false" is a zero value, which merging cannot tell from
+		// unset: a storage section in the file decides itself.
+		if fileConf.AmazonS3 != nil {
+			conf.AmazonS3.Disabled = fileConf.AmazonS3.Disabled
+		}
+		if fileConf.GoogleStorage != nil {
+			conf.GoogleStorage.Disabled = fileConf.GoogleStorage.Disabled
+		}
+		if fileConf.Swift != nil {
+			conf.Swift.Disabled = fileConf.Swift.Disabled
+		}
+		if fileConf.FTPStorage != nil {
+			conf.FTPStorage.Disabled = fileConf.FTPStorage.Disabled
+		}
 	}
 
 	return TestifyConfig(conf)

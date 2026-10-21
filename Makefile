@@ -180,8 +180,15 @@ test-amazon-s3:
 start-generic-s3:
 	@docker rm -f funnel-s3server > /dev/null 2>&1 || echo
 	@docker run -d --name funnel-s3server -p 18888:8000 -e REMOTE_MANAGEMENT_DISABLE=1 zenko/cloudserver
-	@docker rm -f funnel-minio > /dev/null 2>&1 || echo
-	@docker run -d --name funnel-minio -p 9000:9000 -e "MINIO_ACCESS_KEY=fakekey" -e "MINIO_SECRET_KEY=fakesecret" -e "MINIO_REGION=us-east-1" quay.io/minio/minio server /data
+	@$(MAKE) start-s3
+
+# S3-compatible server on localhost:9000 (key "fakekey", secret "fakesecret")
+# for tests/{minio,amazoncli-minio,multi}-s3.config.yml. MinIO no longer
+# publishes its images, so this is versitygw (posix backend).
+start-s3:
+	@docker rm -f funnel-s3 > /dev/null 2>&1 || echo
+	@docker run -d --name funnel-s3 -p 9000:9000 --tmpfs /data versity/versitygw:v1.8.0 \
+		--access fakekey --secret fakesecret --port :9000 posix /data > /dev/null
 
 test-generic-s3:
 	@go test $(call cover_flags,generic-s3-amazoncli-minio-s3) -v ./tests/storage -funnel-config `pwd`/tests/amazoncli-minio-s3.config.yml -run TestAmazonS3Storage

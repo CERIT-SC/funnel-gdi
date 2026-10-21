@@ -16,7 +16,7 @@ separate PR. Last synced with upstream: `eff51273` (2026-09-02, v0.12.x).
 | **Panic recovery** gRPC interceptor | `server/server.go` | `server/server_test.go` (500 mapping) | Ready (1 line). |
 | **Bearer token in CLI/`tes.Client`** (`FUNNEL_SERVER_TOKEN`) | `tes/client.go` | `tes/client_auth_test.go` | Ready. |
 | **GenericS3 `isDir` fix** (`key+"/"` prefix; `x` is not a dir just because `x.bak` exists) | `storage/generic_s3.go` | – (needs MinIO) | Ready, add a unit test. |
-| MinIO image from `quay.io` (Docker Hub rate limits) | `Makefile`, `.github/workflows/compliance.yaml` | – | Ready. |
+| S3 test server versitygw (`make start-s3`) instead of MinIO, whose images are no longer published; `tests/amazoncli-minio-s3.config.yml` uses the current `AWSConfig` keys | `Makefile`, `.github/workflows/compliance.yaml`, `tests/*-s3.config.yml` | `make start-generic-s3 test-generic-s3` | Ready. |
 
 GDI-only (not meant for upstream):
 

@@ -18,8 +18,11 @@ is based on, `N` is the GDI revision on top of it.
 - CI runs the component tests against real databases, event streams and storage (Postgres, MongoDB, Elasticsearch, Badger, DynamoDB local, Datastore and Pub/Sub emulators, Kafka, S3-compatible storage, FTP); their coverage counts toward the total.
 - Acceptance tests with coverage: the `Acceptance Tests` workflow builds Funnel with coverage instrumentation (`make build-cover`), runs the TES compliance suite, the Nextflow nf-canary workflow and the Kubernetes integration tests against it, reports the merged coverage per package and fails below `ACCEPTANCE_COVERAGE_MIN`.
 - Kubernetes integration tests run the GDI Helm chart (`deploy-guide/kubernetes`) on a kind cluster on every push and pull request to `master` (before: the upstream chart, only on the unused `develop` branch).
+- The TES compliance suite also runs with the Postgres database and with S3 storage.
 - Helm chart values `imagePullPolicy` (default `Always`) and `funnel.extraEnv` (extra environment variables of the server container).
 
 ### Fixed
 
-- The backend test targets (`make test-<backend>`) crashed before running any test: the test configuration lost all defaults when a `-funnel-config` file was given, and lists from the file (e.g. `MongoDB.Addrs`) were appended to the defaults instead of replacing them. The MongoDB metrics test failed with the current Prometheus client library.
+- The backend test targets (`make test-<backend>`) crashed before running any test: the test configuration lost all defaults when a `-funnel-config` file was given, and lists from the file (e.g. `MongoDB.Addrs`) were appended to the defaults instead of replacing them. The MongoDB metrics test failed with the current Prometheus client library. A storage backend could not be enabled by a test config file (`Disabled: false`), so the S3 and FTP storage tests were skipped.
+- The FTP test server image is built from `tests/ftp-test-server/Dockerfile`; the published image is no longer available.
+- S3 tests use versitygw (`make start-s3`) because MinIO no longer publishes its images; `tests/amazoncli-minio-s3.config.yml` was updated to the current `AmazonS3.AWSConfig` keys.

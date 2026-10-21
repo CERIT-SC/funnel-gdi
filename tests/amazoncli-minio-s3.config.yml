@@ -1,6 +1,7 @@
 AmazonS3:
   Disabled: false
-  Region: "us-east-1"
-  Endpoint: "localhost:9000"
-  Key: "fakekey"
-  Secret: "fakesecret"
+  AWSConfig:
+    Region: "us-east-1"
+    Endpoint: "localhost:9000"
+    Key: "fakekey"
+    Secret: "fakesecret"

@@ -14,6 +14,7 @@ versioning and the release checklist in [RELEASING.md](RELEASING.md).
 | `go build ./...` | Compile everything |
 | `make test` | `go test` on all packages. The Postgres tests use testcontainers and need a running Docker. |
 | `make test-coverage` | `make test` with `-coverpkg=./...`, then `scripts/coverage` prints coverage per package (`build/coverage/merged.out`); `COVERAGE_MIN=<percent>` fails below it. Generated code and `tests/` helpers are not counted. |
+| `make start-s3` | S3-compatible test server (versitygw) on `localhost:9000`, key `fakekey`, secret `fakesecret` |
 | `make test-<backend>` | Component tests against a real backend (`start-<backend>` starts its container first), e.g. `make start-postgres test-postgres`. `COVER_DIR=<dir>` writes a coverage profile per test run into `<dir>`. |
 | `make website-versions` | Build the documentation site (Hugo) and check its links. Needs `hugo`. |
 | `make build` | Build the `funnel` binary |
