@@ -113,7 +113,7 @@ Values for Kubernetes are the chart defaults in [`values.yaml`](deploy-guide/kub
 | Other browsers | Expected to work if they support ECMAScript 2018 (the build targets the browserslist `>0.2%, not dead, not op_mini all`), but not tested |
 | Known issue | The *Nodes* page sends requests to `/v1/nodes` in an endless loop (an upstream bug in `webdash/src/Pages.js`). The task pages are not affected. With the `local` compute backend the Nodes page lists no nodes anyway. |
 
-**Not supported** — inherited from upstream, never tested in the GDI fork
+**Not supported** — inherited from upstream and not supported by the GDI fork (some have automated tests, see above)
 
 | Area | Not supported |
 |---|---|
@@ -122,6 +122,7 @@ Values for Kubernetes are the chart defaults in [`values.yaml`](deploy-guide/kub
 | Databases | MongoDB, PostgreSQL, Badger, DynamoDB, Datastore, Elasticsearch |
 | Event writers | Kafka, Google Cloud Pub/Sub |
 | Funnel's own scheduler | `Compute: manual` with `funnel node` (see *Docs → Compute → Deploying a cluster*) |
+| Deployment scripts | `install.sh` (installs upstream `calypr/funnel`), `deployments/gce`, `deployments/gce-cos`, `deployments/systemd` |
 | Operating systems | Windows |
 
 ## Option 1: Local binary
@@ -132,6 +133,7 @@ Values for Kubernetes are the chart defaults in [`values.yaml`](deploy-guide/kub
 ```bash
 make build
 ```
+funnel-gdi releases publish container images only. `install.sh` in the repository root comes from upstream and installs upstream `calypr/funnel` releases, not funnel-gdi.
 
 **2. Start the server:**
 ```bash
@@ -305,6 +307,34 @@ Read the release notes on the [Releases](https://github.com/CERIT-SC/funnel-gdi/
 | Task database | Kept on the shared PVC | Kept in `./funnel-work-dir` |
 
 Upgrade from a checkout of the target version, so that the chart matches the image.
+
+### Database migrations
+
+A new version may need to change how the task database stores its data. Funnel does this itself when the server starts; there is nothing to run by hand.
+
+| Database | What happens on upgrade |
+|---|---|
+| BoltDB (default) | Nothing to migrate: missing buckets are created on start, and tasks are stored as Protobuf messages, which newer versions read |
+| PostgreSQL | The server applies the SQL files in [`database/postgres/migrations/`](database/postgres/migrations) that the database does not have yet, in order of their number, each in its own transaction, and records them in the `schema_version` table. A failing migration is rolled back and the server does not start (the error names the file). |
+
+**Back up the database before an upgrade.** A rollback does not undo migrations: a server refuses to start on a PostgreSQL database that a newer Funnel has migrated (`the database schema (version N) is newer than this Funnel supports`). Roll back by restoring the backup together with the old version.
+
+| Database | Back up | Restore |
+|---|---|---|
+| BoltDB on Kubernetes | Stop the server (`kubectl scale deploy/my-funnel -n <namespace> --replicas=0`), copy `funnel.bolt.db` from the shared PVC with a helper pod (below), start the server again (`--replicas=1`) | The same, copying the file back |
+| BoltDB, local binary / Docker | Stop the server, copy `./funnel-work-dir/funnel.db` | Stop the server, copy the file back |
+| PostgreSQL | `pg_dump -Fc -h <host> -U <user> <database> > funnel.dump` | `pg_restore --clean -h <host> -U <user> -d <database> funnel.dump` |
+
+Helper pod for the shared PVC (`pvc.name`, default `storage`):
+```bash
+kubectl run funnel-backup -n <namespace> --image=busybox:1.36 --restart=Never --overrides='
+{"spec": {"containers": [{"name": "backup", "image": "busybox:1.36", "command": ["sleep", "600"],
+  "volumeMounts": [{"name": "storage", "mountPath": "/data"}]}],
+  "volumes": [{"name": "storage", "persistentVolumeClaim": {"claimName": "storage"}}]}}'
+kubectl wait -n <namespace> --for=condition=Ready pod/funnel-backup
+kubectl cp <namespace>/funnel-backup:/data/funnel.bolt.db ./funnel.bolt.db   # restore: swap the two paths
+kubectl delete pod -n <namespace> funnel-backup
+```
 
 ## Production checklist
 

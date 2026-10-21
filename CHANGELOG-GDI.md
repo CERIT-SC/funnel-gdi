@@ -15,6 +15,7 @@ is based on, `N` is the GDI revision on top of it.
 ### Added
 
 - Postgres database: the schema is created and updated by versioned SQL migrations (`database/postgres/migrations/`), applied in order on server start and recorded in a `schema_version` table. Existing databases are adopted without changes. A server refuses to start on a database migrated by a newer Funnel.
+- Deployment guide: "Database migrations" (what happens to BoltDB and PostgreSQL on upgrade, how to back up and restore before an upgrade or rollback). `install.sh` and the `deployments/` scripts are marked as upstream and not supported.
 - "Troubleshooting for users" in the deployment guide: what each task state means, how to read a task's logs, and common problems with their causes and fixes. "Getting help" explains where to ask (GitHub issues with templates for bugs and questions) and what to include.
 - CI reports the statement coverage of the unit and component tests per package (job summary and the `coverage` artifact with an HTML report) and fails when it drops below the minimum `COVERAGE_MIN`. Run `make test-coverage` for the same report locally.
 - CI runs the component tests against real databases, event streams and storage (Postgres, MongoDB, Elasticsearch, Badger, DynamoDB local, Datastore and Pub/Sub emulators, Kafka, S3-compatible storage, FTP); their coverage counts toward the total.
