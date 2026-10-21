@@ -1,35 +1,39 @@
 name: Nextflow Test
 
+# Called by acceptance.yaml, which builds the coverage-instrumented binary
+# (artifact "funnel-cover") and merges the coverage of all acceptance tests.
 on:
-  # Run on push to main/master/develop (e.g. after PR is merged)
-  push:
-    branches:
-      - develop
-      - master
-  # Allows manual runs from the Actions tab
-  workflow_dispatch:
+  workflow_call:
 
-# Cancel redundant jobs (if a new job is triggered for the same workflow and ref)
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
-  build:
-    uses: ./.github/workflows/build.yaml
-
   nextflow:
-    needs: build
     runs-on: ubuntu-latest
     steps:
     - name: Download Funnel
       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
       with:
-        name: funnel
+        name: funnel-cover
+
+    # For "go tool covdata"
+    - name: Check out code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        path: src
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      with:
+        go-version-file: src/go.mod
+        cache: false
 
     - name: Start Funnel
       run: |
         chmod +x ./funnel
-        ./funnel server --LocalStorage.AllowedDirs $HOME run &
+        # The binary is built with -cover: it writes coverage data to
+        # GOCOVERDIR when it exits normally (see "Stop Funnel").
+        mkdir -p covdata
+        GOCOVERDIR=`pwd`/covdata ./funnel server --LocalStorage.AllowedDirs $HOME run &> funnel.logs &
+        echo $! > funnel.pid
     
     - name: Setup Java
       uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -74,3 +78,33 @@ jobs:
     - name: Run nf-canary tests
       run: |
         nextflow run nf-canary/main.nf
+
+    - name: Stop Funnel
+      if: always()
+      run: |
+        pid=$(cat funnel.pid)
+        kill -INT "$pid" 2>/dev/null || exit 0
+        for i in $(seq 1 30); do
+          kill -0 "$pid" 2>/dev/null || exit 0
+          sleep 1
+        done
+        echo "Funnel did not stop within 30 s; no coverage data will be written"
+        kill -KILL "$pid"
+
+    - name: Coverage profile
+      if: always()
+      run: |
+        mkdir -p coverage
+        if ! ls covdata/covcounters.* > /dev/null 2>&1; then
+          echo "::warning::No coverage data: Funnel did not exit normally (killed or crashed)."
+          exit 0
+        fi
+        go tool covdata textfmt -i=covdata -o=coverage/nextflow.out
+
+    - name: Upload coverage
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: coverage-acceptance-nextflow
+        path: coverage/*.out
+        if-no-files-found: ignore

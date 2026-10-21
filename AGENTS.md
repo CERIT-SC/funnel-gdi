@@ -32,7 +32,7 @@ Run after every change, in this order:
 
 CI (`.github/workflows/tests.yaml`) runs the same tests with `-coverpkg=./...` (job `unitTest`), the backend component tests (job `backendTests`: `make start-<backend> test-<backend> COVER_DIR=…` for postgres, mongodb, elasticsearch, badger, dynamodb, datastore, kafka, pubsub, generic-s3, ftp) and merges their coverage (job `coverage`): per-package report in the job summary, artifact `coverage` with the merged profile and an HTML report, and a failure below `COVERAGE_MIN`.
 
-Acceptance tests (`.github/workflows/acceptance.yaml`) run against a binary built with `make build-cover`; each suite (called workflows, e.g. `compliance.yaml`) stops Funnel with SIGINT so it writes its coverage to `GOCOVERDIR`, converts it with `go tool covdata textfmt` and uploads a `coverage-acceptance-*` artifact. The `coverage` job merges them (artifact `acceptance-coverage`) and fails below `ACCEPTANCE_COVERAGE_MIN`.
+Acceptance tests (`.github/workflows/acceptance.yaml`) run against a binary built with `make build-cover`; each suite (called workflows `compliance.yaml`, `nextflow.yaml`) stops Funnel with SIGINT so it writes its coverage to `GOCOVERDIR`, converts it with `go tool covdata textfmt` and uploads a `coverage-acceptance-*` artifact. The `coverage` job merges them (artifact `acceptance-coverage`) and fails below `ACCEPTANCE_COVERAGE_MIN`.
 
 Changes to `.github/workflows/*` can only be verified by a CI run (push a branch / open a PR); check the YAML locally by running the commands the workflow runs.
 

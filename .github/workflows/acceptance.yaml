@@ -3,6 +3,7 @@
 # Builds Funnel with coverage instrumentation (make build-cover), runs the
 # acceptance test suites against it and merges their coverage:
 #  - compliance.yaml: GA4GH TES compliance suite (openapi-test-runner)
+#  - nextflow.yaml: nf-canary workflow through Nextflow's TES executor
 #
 # Each suite stops Funnel gracefully, converts its coverage data
 # ("go tool covdata textfmt") and uploads it as a "coverage-acceptance-*"
@@ -36,8 +37,12 @@ jobs:
     needs: build
     uses: ./.github/workflows/compliance.yaml
 
+  nextflow:
+    needs: build
+    uses: ./.github/workflows/nextflow.yaml
+
   coverage:
-    needs: [compliance]
+    needs: [compliance, nextflow]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -45,6 +50,8 @@ jobs:
       # without generated code and tests/ helpers (scripts/coverage).
       # May only be raised (AGENTS.md, INV-11).
       ACCEPTANCE_COVERAGE_MIN: 24
+      # Profile name prefixes the suites upload (reported when missing)
+      SUITES: compliance nextflow
     steps:
     - name: Check out code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -71,6 +78,10 @@ jobs:
         fi
         {
           echo "Profiles: $(echo $profiles | xargs -n1 basename | tr '\n' ' ')"
+          echo
+          for suite in $SUITES; do
+            ls build/coverage/acceptance/"$suite"*.out > /dev/null 2>&1 || echo "**Missing:** coverage of \`$suite\` (its job failed or Funnel did not exit normally)."
+          done
           echo
         } | tee -a "$GITHUB_STEP_SUMMARY"
         go run ./scripts/coverage -format markdown -title "Acceptance test coverage" \
