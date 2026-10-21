@@ -47,22 +47,32 @@ func TestExecutorStdioFiles(t *testing.T) {
 	}
 }
 
-// An output to a storage the server does not support fails the task before
-// it runs.
-func TestUnsupportedOutputStorage(t *testing.T) {
+// An input or output on a storage the server does not support fails the task
+// before it runs.
+func TestUnsupportedStorage(t *testing.T) {
 	tests.SetLogOutput(log, t)
-	id, err := fun.RunTask(&tes.Task{
-		Outputs:   []*tes.Output{{Url: "gs://bucket/out.txt", Path: "/outputs/out.txt"}},
-		Executors: []*tes.Executor{{Image: "alpine", Command: []string{"touch", "/outputs/out.txt"}}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	task := fun.Wait(id)
-	if task.State != tes.State_SYSTEM_ERROR {
-		t.Fatalf("state %s, want SYSTEM_ERROR", task.State)
-	}
-	if logs := strings.Join(task.Logs[0].SystemLogs, "\n"); !strings.Contains(logs, "not supported") {
-		t.Errorf("system logs do not explain the error:\n%s", logs)
+	for name, task := range map[string]*tes.Task{
+		"input": {
+			Inputs:    []*tes.Input{{Url: "gs://bucket/in.txt", Path: "/inputs/in.txt"}},
+			Executors: []*tes.Executor{{Image: "alpine", Command: []string{"cat", "/inputs/in.txt"}}},
+		},
+		"output": {
+			Outputs:   []*tes.Output{{Url: "gs://bucket/out.txt", Path: "/outputs/out.txt"}},
+			Executors: []*tes.Executor{{Image: "alpine", Command: []string{"touch", "/outputs/out.txt"}}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			id, err := fun.RunTask(task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := fun.Wait(id)
+			if got.State != tes.State_SYSTEM_ERROR {
+				t.Fatalf("state %s, want SYSTEM_ERROR", got.State)
+			}
+			if logs := strings.Join(got.Logs[0].SystemLogs, "\n"); !strings.Contains(logs, "not supported") {
+				t.Errorf("system logs do not explain the error:\n%s", logs)
+			}
+		})
 	}
 }
