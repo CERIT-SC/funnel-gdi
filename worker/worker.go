@@ -395,7 +395,8 @@ func (r *DefaultWorker) openStepLogs(mapper *FileMapper, s *stepWorker, d *tes.E
 
 	// Find the path for task stdin
 	if d.Stdin != "" {
-		stdin, err = mapper.CreateHostFile(d.Stdin)
+		// Open, not create: the file is an input of the task.
+		stdin, err = mapper.OpenHostFile(d.Stdin)
 		s.Command.SetStdin(stdin)
 		if err != nil {
 			s.Event.Error("Couldn't prepare log files", err)
