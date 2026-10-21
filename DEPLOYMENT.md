@@ -394,8 +394,8 @@ curl -s "http://localhost:8000/v1/tasks/<task-id>?view=FULL"
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `400 Bad Request` with `Task.Executors[0].Image: required, but empty` (or another `Task.…` message) | The task document is invalid; every problem is listed | Fix the named field. Each executor needs `image` and `command`; paths (`path`, `workdir`, `stdin`, `stdout`, `stderr`, volumes) must be absolute |
-| `400 Bad Request` with `… is not allowed as an input path` (or output, volume, working directory) | The path is reserved by the server, e.g. a system directory | Use a path under your own directory such as `/data` |
+| `400 Bad Request`: `FUNNEL-TASK-006` (invalid task message), followed by lines such as `FUNNEL-VAL-002: Task.Executors[0].Image: required, but empty` | The task document is invalid; every problem is listed with its own code | Fix the named field. Each executor needs `image` and `command`; paths (`path`, `workdir`, `stdin`, `stdout`, `stderr`, volumes) must be absolute |
+| `400 Bad Request` with `FUNNEL-VAL-013` `… is not allowed as an input path` (or `-005`, `-017`, `-019` for working directory, output, volume) | The path is reserved by the server, e.g. a system directory | Use a path under your own directory such as `/data` |
 | `401 Unauthorized`: `FUNNEL-AUTH-002` (token missing) or `FUNNEL-AUTH-003` (Basic-authentication failed) | No or wrong credentials | Send `-u <user>:<password>`, or `Authorization: Bearer <token>` when the server uses OIDC |
 | `401 Unauthorized`: `FUNNEL-AUTH-004` (Bearer authorization token not accepted) | The OIDC token expired or is for another service | Get a new token |
 | `404 Not Found`: `FUNNEL-TASK-001` (task not found) | Wrong task ID | Check the ID with `curl "http://localhost:8000/v1/tasks?view=MINIMAL"` |

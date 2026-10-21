@@ -16,8 +16,8 @@ func TestTaskNoExecutorsValidationError(t *testing.T) {
 	if err == nil {
 		t.Error("expected validation error")
 	}
-	expected := `invalid task message:
-Task.Executors: at least one executor is required
+	expected := `FUNNEL-TASK-006: invalid task message:
+FUNNEL-VAL-001: Task.Executors: at least one executor is required
 `
 
 	e := status.Convert(err).Message()
@@ -42,7 +42,7 @@ func TestTaskInputContentValidationError(t *testing.T) {
 
 	e := status.Convert(err).Message()
 
-	if !strings.Contains(e, "Task.Inputs[0].Content") {
+	if !strings.Contains(e, "FUNNEL-VAL-009: Task.Inputs[0].Content") {
 		t.Error("unexpected error message")
 	}
 }
@@ -88,14 +88,14 @@ func TestTaskValidationError(t *testing.T) {
 		t.Error("expected validation error")
 	}
 
-	expected := `invalid task message:
-Task.Executors[0].Image: required, but empty
-Task.Executors[0].Command: required, but empty
-Task.Inputs[0].Url: required, but empty
-Task.Inputs[0].Path: required, but empty
-Task.Outputs[0].Url: required, but empty
-Task.Outputs[0].Path: required, but empty
-Task.Volumes[0]: must be an absolute path
+	expected := `FUNNEL-TASK-006: invalid task message:
+FUNNEL-VAL-002: Task.Executors[0].Image: required, but empty
+FUNNEL-VAL-003: Task.Executors[0].Command: required, but empty
+FUNNEL-VAL-010: Task.Inputs[0].Url: required, but empty
+FUNNEL-VAL-011: Task.Inputs[0].Path: required, but empty
+FUNNEL-VAL-014: Task.Outputs[0].Url: required, but empty
+FUNNEL-VAL-015: Task.Outputs[0].Path: required, but empty
+FUNNEL-VAL-018: Task.Volumes[0]: must be an absolute path
 `
 
 	e := status.Convert(err).Message()

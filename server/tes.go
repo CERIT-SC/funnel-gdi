@@ -131,6 +131,10 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 	}
 
 	if err := tes.InitTaskWithForbiddenPathPrefixes(task, true, ts.forbiddenPathPrefixes()); err != nil {
+		var invalid tes.ValidationError
+		if errors.As(err, &invalid) {
+			return nil, errcodes.Status(codes.InvalidArgument, "FUNNEL-TASK-006", invalid)
+		}
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err.Error())
 	}
 

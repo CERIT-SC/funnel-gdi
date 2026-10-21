@@ -8,8 +8,8 @@ menu:
 
 # Error codes
 
-Errors the Funnel API returns to a client start with a code when they are
-listed on this page:
+Errors the Funnel API returns to a client about authentication, access, task
+requests and task validation start with a code:
 
 ```
 FUNNEL-<AREA>-<NNN>: <message>
@@ -32,6 +32,7 @@ selecting a language is not implemented yet.
 | `GEN` | Funnel itself |
 | `AUTH` | Authentication (Basic, OIDC) and access to other users' tasks |
 | `TASK` | Creating, reading and canceling tasks |
+| `VAL` | Validation of a submitted task; all problems of a task are listed together under `FUNNEL-TASK-006` |
 
 ## Codes
 
@@ -51,3 +52,24 @@ selecting a language is not implemented yet.
 | `FUNNEL-TASK-003` | 400 | invalid resources: … | The task asks for more CPU, memory or disk than the server allows on Kubernetes. Ask for less, or ask the operator for the limits. |
 | `FUNNEL-TASK-004` | 500 | error creating task: … | The task could not be stored in the database. Try again; if it persists, the operator should check the server log and the database. |
 | `FUNNEL-TASK-005` | from the plugin | rejected by the authorization plugin: … | The server's authorization plugin rejected the request; the message comes from the plugin. |
+| `FUNNEL-TASK-006` | 400 | invalid task message: followed by one line per problem | The task document is invalid. Each following line starts with a `FUNNEL-VAL` code; fix all of them. |
+| `FUNNEL-VAL-001` | 400 (in `FUNNEL-TASK-006`) | Task.Executors: at least one executor is required | Add an executor with `image` and `command`. |
+| `FUNNEL-VAL-002` | 400 (in `FUNNEL-TASK-006`) | Task.Executors[*i*].Image: required, but empty | Set the container image of executor *i*. |
+| `FUNNEL-VAL-003` | 400 (in `FUNNEL-TASK-006`) | Task.Executors[*i*].Command: required, but empty | Set the command of executor *i*. |
+| `FUNNEL-VAL-004` | 400 (in `FUNNEL-TASK-006`) | Task.Executors[*i*].Workdir: must be an absolute path | Use a path starting with `/`. |
+| `FUNNEL-VAL-005` | 400 (in `FUNNEL-TASK-006`) | Task.Executors[*i*].Workdir: "…" is not allowed as a working directory | The path is reserved by the server (e.g. a system directory); use your own directory such as `/data`. |
+| `FUNNEL-VAL-006` | 400 (in `FUNNEL-TASK-006`) | Task.Executors[*i*].Stdin: must be an absolute path | Use a path starting with `/`. |
+| `FUNNEL-VAL-007` | 400 (in `FUNNEL-TASK-006`) | Task.Executors[*i*].Stdout: must be an absolute path | Use a path starting with `/`. |
+| `FUNNEL-VAL-008` | 400 (in `FUNNEL-TASK-006`) | Task.Executors[*i*].Stderr: must be an absolute path | Use a path starting with `/`. |
+| `FUNNEL-VAL-009` | 400 (in `FUNNEL-TASK-006`) | Task.Inputs[*i*].Content: Url is non-empty | An input has either inline `content` or a `url`, not both. |
+| `FUNNEL-VAL-010` | 400 (in `FUNNEL-TASK-006`) | Task.Inputs[*i*].Url: required, but empty | Set the `url` of input *i* (or its `content`). |
+| `FUNNEL-VAL-011` | 400 (in `FUNNEL-TASK-006`) | Task.Inputs[*i*].Path: required, but empty | Set the path where input *i* appears in the container. |
+| `FUNNEL-VAL-012` | 400 (in `FUNNEL-TASK-006`) | Task.Inputs[*i*].Path: must be an absolute path | Use a path starting with `/`. |
+| `FUNNEL-VAL-013` | 400 (in `FUNNEL-TASK-006`) | Task.Inputs[*i*].Path: "…" is not allowed as an input path | The path is reserved by the server; use your own directory such as `/data`. |
+| `FUNNEL-VAL-014` | 400 (in `FUNNEL-TASK-006`) | Task.Outputs[*i*].Url: required, but empty | Set where output *i* is uploaded to. |
+| `FUNNEL-VAL-015` | 400 (in `FUNNEL-TASK-006`) | Task.Outputs[*i*].Path: required, but empty | Set the container path of output *i*. |
+| `FUNNEL-VAL-016` | 400 (in `FUNNEL-TASK-006`) | Task.Outputs[*i*].Path: must be an absolute path | Use a path starting with `/`. |
+| `FUNNEL-VAL-017` | 400 (in `FUNNEL-TASK-006`) | Task.Outputs[*i*].Path: "…" is not allowed as an output path | The path is reserved by the server; use your own directory such as `/data`. |
+| `FUNNEL-VAL-018` | 400 (in `FUNNEL-TASK-006`) | Task.Volumes[*i*]: must be an absolute path | Use a path starting with `/`. |
+| `FUNNEL-VAL-019` | 400 (in `FUNNEL-TASK-006`) | Task.Volumes[*i*]: "…" is not allowed as a volume path | The path is reserved by the server; use your own directory such as `/data`. |
+| `FUNNEL-VAL-020` | 400 (in `FUNNEL-TASK-006`) | Task.Tags[""]=…: empty key | Tag names must not be empty. |

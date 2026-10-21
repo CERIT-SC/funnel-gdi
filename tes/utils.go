@@ -99,7 +99,7 @@ func InitTaskWithForbiddenPathPrefixes(task *Task, overwrite bool, forbiddenPath
 		task.CreationTime = time.Now().Format(time.RFC3339Nano)
 	}
 	if err := ValidateWithForbiddenPathPrefixes(task, forbiddenPathPrefixes); err != nil {
-		return fmt.Errorf("invalid task message:\n%s", err)
+		return fmt.Errorf("invalid task message:\n%w", err)
 	}
 	return nil
 }
