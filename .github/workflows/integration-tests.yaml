@@ -1,144 +1,243 @@
 name: Integration Tests (K8s)
 
+# Called by acceptance.yaml, which builds the coverage-instrumented binary
+# (artifact "funnel-cover") and merges the coverage of all acceptance tests.
+#
+# Installs the GDI Helm chart (deploy-guide/kubernetes, pvcMode "shared")
+# with an image made from that binary on a kind cluster, with versitygw as
+# S3 storage, runs a TES task and Nextflow's nf-canary against it, then stops the
+# server gracefully and collects its coverage from the shared PVC. Coverage of
+# the per-task worker pods is not collected.
 on:
-  push:
-    branches:
-      - develop
-  pull_request:
-    branches:
-      - develop
+  workflow_call:
 
 permissions:
   contents: read
 
-# Cancel redundant jobs
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
- 
+env:
+  BASIC_PASSWORD: ci-password
+
 jobs:
   integration-tests:
     runs-on: ubuntu-latest
- 
+
     steps:
+      - name: Check out code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # For "go tool covdata"
+      - name: Set up Go 1.x
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
       # -----------------
-      # 1. Cluster Setup
+      # 1. Cluster setup
       # -----------------
- 
+
       - name: Create Kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
-          cluster_name: funnel-gen3
+          cluster_name: funnel-gdi
 
       - name: Install Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
- 
-      # ---------------------------
-      # 2. Install Funnel + MinIO
-      # ---------------------------
- 
+
+      - name: Download Funnel
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: funnel-cover
+          path: image
+
+      # The release image (Dockerfile) builds Funnel itself; here the image
+      # only wraps the coverage-instrumented binary built by acceptance.yaml.
+      - name: Build and load the Funnel image
+        run: |
+          chmod +x image/funnel
+          printf 'FROM alpine\nWORKDIR /opt/funnel\nCOPY funnel /app/funnel\nENTRYPOINT ["/app/funnel"]\n' \
+            | docker build -t funnel-gdi:ci -f - image
+          kind load docker-image funnel-gdi:ci --name funnel-gdi
+
+      # -----------------------------
+      # 2. Install S3 storage + Funnel
+      # -----------------------------
+
+      # S3-compatible storage for task outputs and the Nextflow work dir.
+      # MinIO no longer publishes its images (quay.io and Docker Hub), so CI
+      # uses versitygw; a bucket of its posix backend is a directory.
+      - name: Install S3 storage
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: s3
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: s3
+            template:
+              metadata:
+                labels:
+                  app: s3
+              spec:
+                initContainers:
+                  - name: bucket
+                    image: busybox:1.36
+                    command: ["mkdir", "-p", "/data/local"]
+                    volumeMounts:
+                      - name: data
+                        mountPath: /data
+                containers:
+                  - name: versitygw
+                    image: versity/versitygw:v1.8.0
+                    args: ["--access", "example", "--secret", "example-password", "--port", ":9000", "posix", "/data"]
+                    ports:
+                      - containerPort: 9000
+                    readinessProbe:
+                      tcpSocket:
+                        port: 9000
+                    volumeMounts:
+                      - name: data
+                        mountPath: /data
+                volumes:
+                  - name: data
+                    emptyDir: {}
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: s3
+          spec:
+            selector:
+              app: s3
+            ports:
+              - port: 9000
+                targetPort: 9000
+          EOF
+          kubectl rollout status deploy/s3 --timeout=180s
+
+      # kind's only StorageClass ("standard", local-path) cannot provision
+      # ReadWriteMany volumes, which the chart's own PVC requests. On a
+      # single-node cluster a ReadWriteOnce volume can still be mounted by
+      # the server and all task pods, so CI creates the shared PVC itself
+      # (pvc.existing) and uses pvcMode "shared" (no per-task PVCs).
+      - name: Create the shared PVC
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: storage
+          spec:
+            accessModes: [ReadWriteOnce]
+            storageClassName: standard
+            resources:
+              requests:
+                storage: 2Gi
+          EOF
+
       - name: Install Funnel
         run: |
           cat <<EOF > values.yaml
-          endpoint_url: http://minio.default.svc.cluster.local:9000
-          authenticationSource: driver
-
-          AmazonS3:
-            Disabled: true
-
-          GenericS3:
-          - Disabled: false
-            Endpoint: http://minio.default:9000
-            Key: example
-            Secret: example-password
-            Region: us-east-1
-            Bucket: local
-
-          Database: postgres
-
-          EventWriters:
-            - log
-            - postgres
-
-          mongodb:
-            enabled: false  
+          image: funnel-gdi:ci
+          imagePullPolicy: IfNotPresent
+          funnel:
+            # The server writes coverage data to the shared PVC when it stops.
+            extraEnv:
+              - name: GOCOVERDIR
+                value: /opt/funnel/funnel-work-dir
+            resources:
+              limits:
+                cpu: 1
+                memory: 1Gi
+                ephemeral-storage: 2Gi
+              requests:
+                cpu: 100m
+                memory: 256Mi
+                ephemeral-storage: 1Gi
+          pvc:
+            name: storage
+            existing: true
+          pvcMode: shared
+          basicauth:
+            user: admin
+            password: ${BASIC_PASSWORD}
+          s3:
+            disabled: false
+            endpoint: http://s3.default.svc.cluster.local:9000
+            key: example
+            secret: example-password
+            region: us-east-1
+          ingress:
+            enabled: false
           EOF
-
-          helm repo add calypr https://calypr.org/helm-charts
-          helm repo update
-          helm upgrade --install funnel calypr/funnel --wait --timeout=60s --version 0.1.99-rc.35 --values values.yaml
-
-      - name: Debug Funnel pods (on failure)
-        if: failure()
-        run: |
-          kubectl get pods -o wide
-          kubectl describe pods
-          kubectl get events --sort-by='.lastTimestamp'
-
-      - name: Install Minio
-        run: |
-          helm repo add minio https://charts.min.io/
-          helm repo update
-          helm upgrade --install minio minio/minio \
-            --set resources.requests.memory=512Mi \
-            --set replicas=1 \
-            --set persistence.enabled=false \
-            --set mode=standalone \
-            --set rootUser=example \
-            --set rootPassword=example-password \
-            --set buckets[0].name=local \
-            --set buckets[0].policy=none \
-            --set buckets[0].purge=false
-
-      - name: Install AWS S3 CSI Driver (for testing S3 mounts in Funnel)
-        run: |
-          kubectl create secret generic aws-secret \
-            --namespace kube-system \
-            --from-literal "key_id=example" \
-            --from-literal "access_key=example-password"
-
-          helm repo add aws-mountpoint-s3-csi-driver https://awslabs.github.io/mountpoint-s3-csi-driver
-          helm repo update
-          helm upgrade --install aws-mountpoint-s3-csi-driver aws-mountpoint-s3-csi-driver/aws-mountpoint-s3-csi-driver \
-            --namespace kube-system \
-            --set awsAccessSecret.key_id=example,awsAccessSecret.access_key=example-password
+          helm upgrade --install funnel deploy-guide/kubernetes --wait --timeout 5m --values values.yaml
 
       # -------------------------------------
       # 3. Expose services for local testing
       # -------------------------------------
- 
+
       - name: Port-forward Funnel
         run: kubectl port-forward svc/funnel 8000:8000 &
 
       - name: Wait for Funnel port-forward
         run: |
-          for i in $(seq 1 10); do
-            curl -sf http://localhost:8000/service-info && break
-            echo "Waiting for Funnel... ($i/10)"
+          for i in $(seq 1 15); do
+            curl -sf -u "admin:${BASIC_PASSWORD}" http://localhost:8000/v1/service-info && exit 0
+            echo "Waiting for Funnel... ($i/15)"
             sleep 2
           done
+          exit 1
 
-      - name: Port-forward Minio
-        run: kubectl port-forward svc/minio 9000:9000 &
+      - name: Port-forward S3 storage
+        run: kubectl port-forward svc/s3 9000:9000 &
 
-      - name: Wait for Minio port-forward
+      - name: Wait for S3 port-forward
         run: |
-          for i in $(seq 1 10); do
-            curl -sf http://localhost:9000/minio/health/ready && break
-            echo "Waiting for Minio... ($i/10)"
+          for i in $(seq 1 15); do
+            # Any HTTP answer (anonymous requests get 403) means it is up
+            curl -s -o /dev/null http://localhost:9000 && exit 0
+            echo "Waiting for S3... ($i/15)"
             sleep 2
           done
- 
-      # ----------------------------
-      # 4. Run Nextflow + nf-canary
-      # ----------------------------
-        
+          exit 1
+
+      # --------------------------
+      # 4. TES task + nf-canary
+      # --------------------------
+
+      - name: Run TES tasks
+        run: |
+          # A task without files, and one that writes an output to S3
+          cat > s3-output.json <<EOF
+          {"name": "S3 output", "executors": [{"image": "alpine", "command": ["sh", "-c", "echo hello s3 > /out/hello.txt"]}],
+           "outputs": [{"url": "s3://local/ci/hello.txt", "path": "/out/hello.txt"}]}
+          EOF
+          for task in compliance-tests/hello-world.json s3-output.json; do
+            id=$(curl -sf -u "admin:${BASIC_PASSWORD}" -X POST http://localhost:8000/v1/tasks -d @"$task" | jq -r .id)
+            echo "$task: task $id"
+            state=
+            for i in $(seq 1 60); do
+              state=$(curl -sf -u "admin:${BASIC_PASSWORD}" "http://localhost:8000/v1/tasks/$id" | jq -r .state)
+              case "$state" in COMPLETE|EXECUTOR_ERROR|SYSTEM_ERROR|CANCELED) break ;; esac
+              sleep 5
+            done
+            echo "$task: $state"
+            if [ "$state" != COMPLETE ]; then
+              curl -s -u "admin:${BASIC_PASSWORD}" "http://localhost:8000/v1/tasks/$id?view=FULL"
+              exit 1
+            fi
+          done
+          kubectl exec deploy/s3 -c versitygw -- cat /data/local/ci/hello.txt | grep -q "hello s3"
+
       - name: Setup Java
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '21'
-          
+
       - name: Install Nextflow
         run: |
           curl -s https://get.nextflow.io | bash
@@ -146,7 +245,7 @@ jobs:
           mkdir -p $HOME/.local/bin
           mv nextflow $HOME/.local/bin/
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          
+
       # Ref: https://github.com/nextflow-io/nf-ga4gh/blob/main/.github/workflows/build.yml
       - name: Install + configure nf-canary
         run: |
@@ -157,24 +256,20 @@ jobs:
           cat <<EOF > nextflow.config
           // Nextflow config file for running on TES Backend
           plugins {
-            id 'nf-ga4gh@${PLUGIN_VERSION}'
+            id 'nf-ga4gh'
           }
           process {
               executor = 'tes'
               // Pinning to recent LTS release for stability/security
               container = 'ubuntu:24.04'
           }
+          tes {
+              endpoint      = 'http://localhost:8000'
+              basicUsername = 'admin'
+              basicPassword = '${BASIC_PASSWORD}'
+          }
           params {
-              // TES
-              endpoint                   = 'http://localhost:8000'
-              basicUsername              = null
-              basicPassword              = null
-
               // Run all non-Fusion tests
-              run                        = 'all'
-              remoteFile                 = ''
-
-              // Disable Fusion — not applicable for basic TES/Funnel
               skip                          = ''
               gpu                           = false
               run                           = ''
@@ -205,24 +300,76 @@ jobs:
           EOF
 
       - name: Run nf-canary tests
-        id: nf_canary
         env:
-          NXF_TES_ENDPOINT: http://localhost:8000
           NXF_ANSI_LOG: false
         run: |
           cd nf-canary
           nextflow run main.nf -with-report report.html -w s3://local/work 2>&1 | tee nextflow.log
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-      
+          exit ${PIPESTATUS[0]}
+
+      - name: Debug Funnel pods (on failure)
+        if: failure()
+        run: |
+          kubectl get pods,jobs,pvc -o wide
+          kubectl describe pods
+          kubectl logs deploy/funnel --tail=200 || true
+          kubectl get events --sort-by='.lastTimestamp'
+
       # ------------------------------
-      # 5. Upload test logs + reports
+      # 5. Coverage
       # ------------------------------
+
+      # Scaling to 0 sends SIGTERM; Funnel exits normally and writes its
+      # coverage data to GOCOVERDIR on the shared PVC.
+      - name: Stop Funnel
+        if: always()
+        run: |
+          kubectl scale deploy/funnel --replicas=0 || exit 0
+          kubectl wait --for=delete pod -l app=funnel --timeout=90s || true
+
+      - name: Coverage profile
+        if: always()
+        run: |
+          mkdir -p covdata coverage
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: covcopy
+          spec:
+            containers:
+              - name: covcopy
+                image: busybox:1.36
+                command: ["sleep", "600"]
+                volumeMounts:
+                  - name: storage
+                    mountPath: /data
+            volumes:
+              - name: storage
+                persistentVolumeClaim:
+                  claimName: storage
+          EOF
+          kubectl wait --for=condition=Ready pod/covcopy --timeout=120s
+          kubectl exec covcopy -- sh -c 'cd /data && tar cf - covmeta.* covcounters.* 2>/dev/null' | tar xf - -C covdata || true
+          if ! ls covdata/covcounters.* > /dev/null 2>&1; then
+            echo "::warning::No coverage data: Funnel did not exit normally (killed or crashed)."
+            exit 0
+          fi
+          go tool covdata textfmt -i=covdata -o=coverage/kubernetes.out
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-acceptance-kubernetes
+          path: coverage/*.out
+          if-no-files-found: ignore
 
       - name: Upload Nextflow logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: nextflow-logs
+          name: nextflow-k8s-logs
           path: |
             nf-canary/nextflow.log
             nf-canary/report.html

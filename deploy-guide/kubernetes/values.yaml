@@ -9,6 +9,11 @@
 # and pushed from the repo root (see DEPLOYMENT.md).
 image: <registry>/<registry-user>/funnel-gdi:<tag>
 
+# Pull policy of the server and worker containers. "Always" picks up a
+# re-pushed tag; use "IfNotPresent" for an image loaded into the nodes
+# directly (e.g. "kind load docker-image" in CI).
+imagePullPolicy: Always
+
 # Name of a `kubernetes.io/dockerconfigjson` Secret (already created in
 # this namespace) the cluster should use to pull `image` above. Required
 # whenever that image lives in a private registry/repository/namespace.
@@ -26,6 +31,9 @@ funnel:
   serviceAccount: funnel-sa
   runAsUser: 1000
   seccompProfile: true
+  # Extra environment variables of the server container, as a list of
+  # {name, value} (e.g. GOCOVERDIR for the CI coverage run). Empty by default.
+  extraEnv: []
   resources:
     limits:
       cpu: 2

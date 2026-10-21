@@ -126,7 +126,7 @@ Kubernetes:
           containers:
             - name: funnel-worker-{{`{{.TaskId}}`}}
               image: {{ .Values.image }}
-              imagePullPolicy: Always
+              imagePullPolicy: {{ .Values.imagePullPolicy }}
               args:
                 - "worker"
                 - "run"

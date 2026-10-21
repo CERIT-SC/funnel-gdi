@@ -87,9 +87,11 @@ Values for Kubernetes are the chart defaults in [`values.yaml`](deploy-guide/kub
 
 | What | Scope | When |
 |---|---|---|
-| Unit tests | All packages (`go test ./...`) | Every push |
-| TES API compliance | TES 1.0.0 and 1.1.0, with BoltDB, local compute, local storage | Every push |
-| Workflow engine | Nextflow | Pushes to `master` |
+| Unit tests | All packages (`go test ./...`), with a coverage report and minimum | Every push |
+| Backend component tests | Databases Postgres, MongoDB, Elasticsearch, Badger, DynamoDB (local), Datastore (emulator); events Kafka, Pub/Sub (emulator); FTP storage | Every push |
+| TES API compliance | TES 1.0.0 and 1.1.0, with BoltDB, local compute, local storage | Pushes and pull requests to `master` |
+| Workflow engine | Nextflow (nf-canary), local compute | Pushes and pull requests to `master` |
+| Kubernetes | Option 2 chart `deploy-guide/kubernetes` with `pvcMode: shared` on a single-node kind cluster: a TES task, a task with an S3 output (`GenericS3` against versitygw), Nextflow nf-canary | Pushes and pull requests to `master` |
 
 **Built, but not tested**
 
@@ -97,8 +99,8 @@ Values for Kubernetes are the chart defaults in [`values.yaml`](deploy-guide/kub
 |---|---|
 | Container image `ghcr.io/cerit-sc/funnel-gdi` | linux/amd64, linux/arm64 |
 | `pvcMode: pvc` and `pvcMode: full` | Unit tests only |
-| Storage: HTSGET, SDA, Amazon S3 (`AmazonS3`), other S3 providers (`GenericS3`), HTTP(S) | HTSGET has unit tests; SDA, S3 and HTTP(S) have no automated tests |
-| Prometheus metrics at `/metrics` | Not tested |
+| Storage: HTSGET, SDA, Amazon S3 (`AmazonS3`), HTTP(S) | HTSGET has unit tests; SDA, Amazon S3 and HTTP(S) have no automated tests. Other S3 providers (`GenericS3`) are tested in CI (Kubernetes, above). |
+| Prometheus metrics at `/metrics` | Tested only with the MongoDB backend (component tests) |
 
 **Web dashboard (browser support)**
 

@@ -4,6 +4,8 @@
 # acceptance test suites against it and merges their coverage:
 #  - compliance.yaml: GA4GH TES compliance suite (openapi-test-runner)
 #  - nextflow.yaml: nf-canary workflow through Nextflow's TES executor
+#  - integration-tests.yaml: the GDI Helm chart on a kind cluster (Kubernetes
+#    compute backend), a TES task and nf-canary
 #
 # Each suite stops Funnel gracefully, converts its coverage data
 # ("go tool covdata textfmt") and uploads it as a "coverage-acceptance-*"
@@ -41,8 +43,12 @@ jobs:
     needs: build
     uses: ./.github/workflows/nextflow.yaml
 
+  kubernetes:
+    needs: build
+    uses: ./.github/workflows/integration-tests.yaml
+
   coverage:
-    needs: [compliance, nextflow]
+    needs: [compliance, nextflow, kubernetes]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -51,7 +57,7 @@ jobs:
       # May only be raised (AGENTS.md, INV-11).
       ACCEPTANCE_COVERAGE_MIN: 24
       # Profile name prefixes the suites upload (reported when missing)
-      SUITES: compliance nextflow
+      SUITES: compliance nextflow kubernetes
     steps:
     - name: Check out code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
