@@ -1,0 +1,14 @@
+# Funnel error codes and their messages (English).
+#
+# Every error the API returns to a client starts with one of these codes:
+# "FUNNEL-<AREA>-<NNN>: <message>". The messages are fmt format strings; the
+# code passes the arguments (%s, %d, %q, ...).
+#
+# Rules:
+#   - Codes are permanent: never reuse or renumber one, only add new ones.
+#   - Every code is documented in website/content/docs/error-codes.md (a test
+#     checks this).
+#   - A translation is a copy of this file named messages.<language>.yaml
+#     with the same codes and translated messages.
+
+FUNNEL-GEN-000: "internal error (unknown code %s)"

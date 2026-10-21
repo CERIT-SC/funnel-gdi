@@ -48,6 +48,7 @@ Changes to `.github/workflows/*` can only be verified by a CI run (push a branch
 
 - Tests: standard `testing` package next to the code (`*_test.go`); shared helpers in a `*_test.go` helper file of the package, or in `tests/` for end-to-end tests. Throwaway probe tests are `<pkg>/probe_<topic>_test.go` and are deleted afterwards. No real network in unit tests (`httptest`).
 - Library sources are in the module cache: `$(go env GOMODCACHE)/<module>@<version>/`.
+- Errors returned to API clients use `errcodes.Status(<grpc code>, "FUNNEL-<AREA>-<NNN>", args...)`; add the code and message to `errcodes/messages.en.yaml` and document it in `website/content/docs/error-codes.md` (the `errcodes` tests check both).
 - Match the surrounding code; generated code is regenerated, not edited (see INV-1 and the commands in GDI-FEATURES.md → "Keeping in sync with upstream").
 
 ## Invariants

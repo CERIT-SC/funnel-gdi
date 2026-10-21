@@ -366,7 +366,7 @@ The [Troubleshooting for users](#troubleshooting-for-users) section below covers
 
 ## Troubleshooting for users
 
-This section is for people who submit tasks to a running Funnel server. The examples use `curl` against `http://localhost:8000`; add `-u <user>:<password>` when the server uses Basic authentication. The web dashboard (the server's root URL in a browser) shows the same information.
+This section is for people who submit tasks to a running Funnel server. The examples use `curl` against `http://localhost:8000`; add `-u <user>:<password>` when the server uses Basic authentication. The web dashboard (the server's root URL in a browser) shows the same information. Error messages that start with a code (`FUNNEL-…`) are explained under *Docs → Error codes* on the documentation website.
 
 ### Task states
 

@@ -14,6 +14,7 @@ is based on, `N` is the GDI revision on top of it.
 
 ### Added
 
+- Error codes: API errors can carry a stable code (`FUNNEL-<AREA>-<NNN>: <message>`), with the messages kept in a catalog file (`errcodes/messages.en.yaml`) ready for translation. Reference page *Docs → Error codes* on the website.
 - Postgres database: the schema is created and updated by versioned SQL migrations (`database/postgres/migrations/`), applied in order on server start and recorded in a `schema_version` table. Existing databases are adopted without changes. A server refuses to start on a database migrated by a newer Funnel.
 - Deployment guide: "Database migrations" (what happens to BoltDB and PostgreSQL on upgrade, how to back up and restore before an upgrade or rollback). `install.sh` and the `deployments/` scripts are marked as upstream and not supported.
 - "Troubleshooting for users" in the deployment guide: what each task state means, how to read a task's logs, and common problems with their causes and fixes. "Getting help" explains where to ask (GitHub issues with templates for bugs and questions) and what to include.
