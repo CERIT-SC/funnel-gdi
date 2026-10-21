@@ -1,0 +1,89 @@
+# Acceptance tests with coverage
+#
+# Builds Funnel with coverage instrumentation (make build-cover), runs the
+# acceptance test suites against it and merges their coverage:
+#  - compliance.yaml: GA4GH TES compliance suite (openapi-test-runner)
+#
+# Each suite stops Funnel gracefully, converts its coverage data
+# ("go tool covdata textfmt") and uploads it as a "coverage-acceptance-*"
+# artifact. The coverage job reports the merged coverage per package and
+# fails below ACCEPTANCE_COVERAGE_MIN.
+
+name: Acceptance Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  # Allows manual runs from the Actions tab
+  workflow_dispatch:
+
+# Cancel redundant jobs (if a new job is triggered for the same workflow and ref)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yaml
+    with:
+      cover: true
+
+  compliance:
+    needs: build
+    uses: ./.github/workflows/compliance.yaml
+
+  coverage:
+    needs: [compliance]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      # Minimum total statement coverage (percent) of the acceptance tests,
+      # without generated code and tests/ helpers (scripts/coverage).
+      # May only be raised (AGENTS.md, INV-11).
+      ACCEPTANCE_COVERAGE_MIN: 24
+    steps:
+    - name: Check out code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      with:
+        go-version-file: go.mod
+
+    - name: Download coverage
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      continue-on-error: true
+      with:
+        pattern: coverage-acceptance-*
+        path: build/coverage/acceptance
+        merge-multiple: true
+
+    - name: Coverage report
+      run: |
+        profiles=$(ls build/coverage/acceptance/*.out 2>/dev/null || true)
+        if [ -z "$profiles" ]; then
+          echo "No acceptance coverage profiles were produced." | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
+        {
+          echo "Profiles: $(echo $profiles | xargs -n1 basename | tr '\n' ' ')"
+          echo
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+        go run ./scripts/coverage -format markdown -title "Acceptance test coverage" \
+          -o build/coverage/acceptance-merged.out $profiles | tee -a "$GITHUB_STEP_SUMMARY"
+        go tool cover -html=build/coverage/acceptance-merged.out -o build/coverage/acceptance-coverage.html
+
+    - name: Upload coverage
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: acceptance-coverage
+        path: |
+          build/coverage/acceptance-merged.out
+          build/coverage/acceptance-coverage.html
+
+    - name: Coverage gate
+      run: go run ./scripts/coverage -min "$ACCEPTANCE_COVERAGE_MIN" build/coverage/acceptance-merged.out > /dev/null

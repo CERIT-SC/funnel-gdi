@@ -17,6 +17,7 @@ versioning and the release checklist in [RELEASING.md](RELEASING.md).
 | `make test-<backend>` | Component tests against a real backend (`start-<backend>` starts its container first), e.g. `make start-postgres test-postgres`. `COVER_DIR=<dir>` writes a coverage profile per test run into `<dir>`. |
 | `make website-versions` | Build the documentation site (Hugo) and check its links. Needs `hugo`. |
 | `make build` | Build the `funnel` binary |
+| `make build-cover` | Build `funnel` with coverage instrumentation of all packages (acceptance tests) |
 
 Tools: Go from `go.mod`, golangci-lint v2.11.4 (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4`, built with the `go.mod` Go version), Docker, Hugo (docs only), Helm (chart only).
 
@@ -30,6 +31,8 @@ Run after every change, in this order:
 4. For changes to documentation (`*.md`, `website/`): `make website-versions`
 
 CI (`.github/workflows/tests.yaml`) runs the same tests with `-coverpkg=./...` (job `unitTest`), the backend component tests (job `backendTests`: `make start-<backend> test-<backend> COVER_DIR=…` for postgres, mongodb, elasticsearch, badger, dynamodb, datastore, kafka, pubsub, generic-s3, ftp) and merges their coverage (job `coverage`): per-package report in the job summary, artifact `coverage` with the merged profile and an HTML report, and a failure below `COVERAGE_MIN`.
+
+Acceptance tests (`.github/workflows/acceptance.yaml`) run against a binary built with `make build-cover`; each suite (called workflows, e.g. `compliance.yaml`) stops Funnel with SIGINT so it writes its coverage to `GOCOVERDIR`, converts it with `go tool covdata textfmt` and uploads a `coverage-acceptance-*` artifact. The `coverage` job merges them (artifact `acceptance-coverage`) and fails below `ACCEPTANCE_COVERAGE_MIN`.
 
 Changes to `.github/workflows/*` can only be verified by a CI run (push a branch / open a PR); check the YAML locally by running the commands the workflow runs.
 
@@ -55,7 +58,7 @@ Changes to `.github/workflows/*` can only be verified by a CI run (push a branch
 - **INV-5** Keep the "Documentation version: …" lines in `README.md` and `DEPLOYMENT.md` (checked by `scripts/check-docs-version.sh`).
 - **INV-6** Every fork-only file or feature is listed in `GDI-FEATURES.md`.
 - **INV-7** The official Helm chart is `deploy-guide/kubernetes`.
-- **INV-8** TES API behaviour stays compliant: gRPC/HTTP status codes and response shapes do not change (TES compliance suite, `.github/workflows/compliance.yaml`).
+- **INV-8** TES API behaviour stays compliant: gRPC/HTTP status codes and response shapes do not change (TES compliance suite, `.github/workflows/compliance.yaml`, run by `acceptance.yaml`).
 - **INV-9** No new Go or npm dependencies without the maintainer's approval.
 - **INV-10** GitHub Actions are pinned to a commit SHA with a version comment, as in `.github/workflows/tests.yaml`.
 - **INV-11** Coverage gates (`COVERAGE_MIN`, `ACCEPTANCE_COVERAGE_MIN`) may only be raised, never lowered.

@@ -34,6 +34,13 @@ build:
 	@touch version/version.go
 	@go build -ldflags '$(VERSION_LDFLAGS)' -buildvcs=false .
 
+# Build the funnel binary with coverage instrumentation of all packages (for
+# the acceptance tests): run it with GOCOVERDIR=<dir>, stop it with SIGINT or
+# SIGTERM, then convert with "go tool covdata textfmt -i=<dir> -o=<profile>".
+build-cover:
+	@touch version/version.go
+	@go build -cover -coverpkg=./... -ldflags '$(VERSION_LDFLAGS)' -buildvcs=false .
+
 # Build an unoptimized version of the code for use during debugging
 # https://go.dev/doc/gdb
 debug:

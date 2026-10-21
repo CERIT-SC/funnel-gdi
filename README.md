@@ -7,8 +7,8 @@
 [tests-badge]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/tests.yaml/badge.svg?branch=master
 [tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/tests.yaml
 
-[compliance-tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/compliance.yaml
-[compliance-tests-badge]: https://img.shields.io/github/actions/workflow/status/CERIT-SC/funnel-gdi/compliance.yaml?branch=master&label=TES%20Compliance
+[compliance-tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/acceptance.yaml
+[compliance-tests-badge]: https://img.shields.io/github/actions/workflow/status/CERIT-SC/funnel-gdi/acceptance.yaml?branch=master&label=Acceptance%20tests
 
 [license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
 [license]: https://opensource.org/licenses/MIT

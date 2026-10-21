@@ -18,20 +18,12 @@
 
 name: Compliance Test
 
+# Called by acceptance.yaml, which builds the coverage-instrumented binary
+# (artifact "funnel-cover") and merges the coverage of all acceptance tests.
 on:
-  push:
-  # Allows manual runs from the Actions tab
-  workflow_dispatch:
-
-# Cancel redundant jobs (if a new job is triggered for the same workflow and ref)
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
 
 jobs:
-  build:
-    uses: ./.github/workflows/build.yaml
-
   compliance:
     strategy:
       fail-fast: false
@@ -50,7 +42,6 @@ jobs:
         storage:
           - local
           # - s3
-    needs: build
     runs-on: ubuntu-latest
     steps:
       # Required to access the tests config files (e.g. tests/postgres.config.yml)
@@ -60,7 +51,13 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: funnel
+          name: funnel-cover
+
+      # For "go tool covdata"
+      - name: Set up Go 1.x
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
 
       - name: Start Funnel server
         run: |
@@ -93,7 +90,10 @@ jobs:
           fi
 
           chmod +x funnel
-          ./funnel server run --config `pwd`/config.yml &> funnel.logs &
+          # The binary is built with -cover: it writes coverage data to
+          # GOCOVERDIR when it exits normally (see "Stop Funnel").
+          mkdir -p covdata
+          GOCOVERDIR=`pwd`/covdata ./funnel server run --config `pwd`/config.yml &> funnel.logs &
           echo $! > funnel.pid
 
       - name: Wait for Funnel to be ready
@@ -123,3 +123,34 @@ jobs:
           output=$(openapi-test-runner report --version "${{ matrix.version }}" --server "http://localhost:8000/" 2>&1)
           echo "$output"
           echo "$output" | grep -q "Failed - 0" || { echo "Compliance tests failed"; exit 1; }
+
+      - name: Stop Funnel
+        if: always()
+        run: |
+          pid=$(cat funnel.pid)
+          kill -INT "$pid" 2>/dev/null || exit 0
+          for i in $(seq 1 30); do
+            kill -0 "$pid" 2>/dev/null || exit 0
+            sleep 1
+          done
+          echo "Funnel did not stop within 30 s; no coverage data will be written"
+          kill -KILL "$pid"
+
+      - name: Coverage profile
+        if: always()
+        run: |
+          mkdir -p coverage
+          if ! ls covdata/covcounters.* > /dev/null 2>&1; then
+            echo "::warning::No coverage data: Funnel did not exit normally (killed or crashed)."
+            exit 0
+          fi
+          go tool covdata textfmt -i=covdata \
+            -o=coverage/compliance-${{ matrix.version }}-${{ matrix.db }}-${{ matrix.compute }}-${{ matrix.storage }}.out
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-acceptance-compliance-${{ matrix.version }}-${{ matrix.db }}-${{ matrix.compute }}-${{ matrix.storage }}
+          path: coverage/*.out
+          if-no-files-found: ignore
