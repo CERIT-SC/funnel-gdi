@@ -51,7 +51,7 @@ Per-task storage modes on Kubernetes (`shared` / `pvc` / `full`) with a Helm cha
 
 | Document | Contents |
 |---|---|
-| [DEPLOYMENT.md](DEPLOYMENT.md) | How to deploy (local binary, Kubernetes, Docker), system requirements, supported and tested platforms, upgrade and rollback, production checklist |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | How to deploy (local binary, Kubernetes, Docker), system requirements, supported and tested platforms, upgrade and rollback, production checklist, troubleshooting for operators and for users, getting help |
 | [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) | Changes per GDI version (release notes), with links to the docs of each release |
 | [GDI-FEATURES.md](GDI-FEATURES.md) | What the fork adds on top of upstream and how to keep it in sync |
 | [RELEASING.md](RELEASING.md) | Release policy (versioning, when releases are made, support, compatibility) and the release checklist |

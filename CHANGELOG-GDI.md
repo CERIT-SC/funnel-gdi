@@ -14,6 +14,7 @@ is based on, `N` is the GDI revision on top of it.
 
 ### Added
 
+- "Troubleshooting for users" in the deployment guide: what each task state means, how to read a task's logs, and common problems with their causes and fixes. "Getting help" explains where to ask (GitHub issues with templates for bugs and questions) and what to include.
 - CI reports the statement coverage of the unit and component tests per package (job summary and the `coverage` artifact with an HTML report) and fails when it drops below the minimum `COVERAGE_MIN`. Run `make test-coverage` for the same report locally.
 - CI runs the component tests against real databases, event streams and storage (Postgres, MongoDB, Elasticsearch, Badger, DynamoDB local, Datastore and Pub/Sub emulators, Kafka, S3-compatible storage, FTP); their coverage counts toward the total.
 - Acceptance tests with coverage: the `Acceptance Tests` workflow builds Funnel with coverage instrumentation (`make build-cover`), runs the TES compliance suite, the Nextflow nf-canary workflow and the Kubernetes integration tests against it, reports the merged coverage per package and fails below `ACCEPTANCE_COVERAGE_MIN`.

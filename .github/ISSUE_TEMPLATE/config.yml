@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/CERIT-SC/funnel-gdi/security/policy
+    about: Do not open a public issue for security problems; follow the security policy (SECURITY.md).
+  - name: Troubleshooting for users
+    url: https://cerit-sc.github.io/funnel-gdi/latest/gdi/deployment/#troubleshooting-for-users
+    about: Task states, how to read task logs and the most common problems.

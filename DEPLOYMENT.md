@@ -18,6 +18,8 @@ This guide is also published, per version, at https://cerit-sc.github.io/funnel-
 8. [Upgrade and rollback](#upgrade-and-rollback)
 9. [Production checklist](#production-checklist)
 10. [Troubleshooting](#troubleshooting)
+11. [Troubleshooting for users](#troubleshooting-for-users)
+12. [Getting help](#getting-help)
 
 ## Choose a deployment option
 
@@ -329,3 +331,54 @@ Upgrade from a checkout of the target version, so that the chart matches the ima
 | PVC stays `Pending` | The StorageClass is not a working `ReadWriteMany` class | Fix `pvc.storageClass` / `storageClassName` |
 | PVC stays `Terminating` after uninstall | Finished task pods still reference it | `kubectl delete jobs -n <namespace> -l 'app in (funnel-worker,funnel-executor)'` |
 | `401 Unauthorized` from the API | Basic auth is enabled (Kubernetes) | Add `-u admin:<password>` to `curl` |
+
+The [Troubleshooting for users](#troubleshooting-for-users) section below covers problems of individual tasks.
+
+## Troubleshooting for users
+
+This section is for people who submit tasks to a running Funnel server. The examples use `curl` against `http://localhost:8000`; add `-u <user>:<password>` when the server uses Basic authentication. The web dashboard (the server's root URL in a browser) shows the same information.
+
+### Task states
+
+| State | Meaning | What to do |
+|---|---|---|
+| `QUEUED` | Accepted, waiting for a worker | Wait. If it stays queued for minutes, the server cannot start workers: ask the operator ([Troubleshooting](#troubleshooting)) |
+| `INITIALIZING` | A worker is downloading inputs and pulling images | Wait; large inputs and images take time |
+| `RUNNING` | The executors are running | Wait, or cancel with `curl -X POST http://localhost:8000/v1/tasks/<task-id>:cancel` |
+| `COMPLETE` | All executors exited with code 0 and the outputs were uploaded | – |
+| `EXECUTOR_ERROR` | An executor exited with a non-zero code: the task itself failed | Read the executor's `stderr` and `exit_code` (below) |
+| `SYSTEM_ERROR` | Funnel could not run the task: an input could not be downloaded, an output could not be uploaded, the image could not be pulled, or the worker failed | Read the `system_logs` (below) |
+| `CANCELING`, `CANCELED` | The task is being canceled / was canceled | – |
+
+### Reading the logs of a task
+
+```bash
+curl -s "http://localhost:8000/v1/tasks/<task-id>?view=FULL"
+```
+
+- `logs[].logs[]` holds one entry per executor with its `exit_code`, `stdout` and `stderr`. Only the first 10 KB of each are kept, so write large logs to an output file.
+- `logs[].system_logs` holds Funnel's own messages about the task: downloads, uploads, image pulls and errors.
+- Without `?view=FULL` (the default `MINIMAL` view) only the ID and state are returned.
+
+### Common problems
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `400 Bad Request` with `Task.Executors[0].Image: required, but empty` (or another `Task.…` message) | The task document is invalid; every problem is listed | Fix the named field. Each executor needs `image` and `command`; paths (`path`, `workdir`, `stdin`, `stdout`, `stderr`, volumes) must be absolute |
+| `400 Bad Request` with `… is not allowed as an input path` (or output, volume, working directory) | The path is reserved by the server, e.g. a system directory | Use a path under your own directory such as `/data` |
+| `401 Unauthorized`: `Basic/Bearer authorization token missing` or `Basic-authentication failed` | No or wrong credentials | Send `-u <user>:<password>`, or `Authorization: Bearer <token>` when the server uses OIDC |
+| `401 Unauthorized`: `Bearer authorization token not accepted` | The OIDC token expired or is for another service | Get a new token |
+| `404 Not Found`: `task not found: taskID: …` | Wrong task ID | Check the ID with `curl "http://localhost:8000/v1/tasks?view=MINIMAL"` |
+| `permission denied` | The task belongs to another user, and the server only shows tasks to their owners (`Server.TaskAccess`) | Use the account that created the task, or ask an administrator |
+| `EXECUTOR_ERROR`, `exit_code` 127 or `stderr` says `not found` | The command does not exist in the image | Use an image that contains the program, or the full path to it |
+| `EXECUTOR_ERROR` with `Permission denied` when writing a file | On Kubernetes, executors run as a non-root user and only the task's inputs, outputs, volumes and `/tmp` are writable | Write to an output path or a declared volume; use an image that works without root |
+| `SYSTEM_ERROR`, `system_logs` mention the input URL | An input URL is unreachable, misspelled, or needs credentials the server does not have | Open the URL yourself; for S3 or other storage, ask the operator which storage the server can read |
+| `SYSTEM_ERROR`, or the task stays `INITIALIZING`; the logs mention pulling the image | The image does not exist or is private | Check the image name and tag; private images need the operator to configure access |
+| `COMPLETE`, but the output is missing | `file://` outputs on Kubernetes are deleted with the task | Use S3 (`s3://…`) output URLs ([Storage](#storage)) |
+
+## Getting help
+
+- **Questions and bugs:** open an issue at https://github.com/CERIT-SC/funnel-gdi/issues/new/choose and use the matching template.
+- **Include:** the Funnel version (`curl http://localhost:8000/v1/service-info`, field `version`), the task ID, the state, and the relevant part of `?view=FULL` (see [Reading the logs of a task](#reading-the-logs-of-a-task)). **Remove passwords, tokens and signed URLs before you post**: input URLs and logs may contain them.
+- **Security vulnerabilities:** do not open a public issue; follow [SECURITY.md](SECURITY.md).
+- **Operators:** for problems with the installation itself, see [Troubleshooting](#troubleshooting).

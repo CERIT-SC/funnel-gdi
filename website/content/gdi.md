@@ -28,6 +28,8 @@ outputs and tracks their state and logs.
 | See what changed in a version | [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) (release notes) |
 | Know what the fork adds to upstream Funnel | [GDI features](/gdi/features/) |
 | Know how versions are released and supported | [Release policy](/gdi/release-policy/) |
+| Find out why a task failed | [Troubleshooting for users](/gdi/deployment/#troubleshooting-for-users) |
+| Ask a question or report a bug | [Getting help](/gdi/deployment/#getting-help) |
 | Report a security issue | [Security policy](/gdi/security/) |
 | Learn the task API and the backends | [Docs](/docs/) (upstream reference) |
 
@@ -50,6 +52,7 @@ The complete list with source files and tests is in [GDI features](/gdi/features
 | **Regularly updated** | The GDI pages are generated from the documents in the repository (`DEPLOYMENT.md`, `RELEASING.md`, …) every time the site is built, so the site never differs from the repository. The site is rebuilt and published on every change of `master` and on every release. Pull requests follow a documentation checklist, and every release includes a documentation review and a re-test of the platforms ([Release policy](/gdi/release-policy/#release-checklist)). |
 | **Supported and tested platforms** | [Supported and tested platforms](/gdi/deployment/#supported-and-tested-platforms): manually tested platforms with versions and date (Kubernetes, the web dashboard in Chromium), the supported browsers (Chrome 64 or newer), CI-tested components, components that are built but not tested, and unsupported backends. Pages about unsupported backends are marked as such. |
 | **Deployment guidelines and system requirements** | [Deployment guide](/gdi/deployment/): three deployment options, [minimum resources, storage, network and software requirements](/gdi/deployment/#system-requirements), upgrade and rollback, production checklist and troubleshooting. |
+| **End-user troubleshooting and support** | [Troubleshooting for users](/gdi/deployment/#troubleshooting-for-users): what each task state means, how to read a task's logs, and the common problems with their causes and fixes. [Getting help](/gdi/deployment/#getting-help): GitHub issue templates for bugs and questions, what to include, and the separate route for security issues. Operators have their own [Troubleshooting](/gdi/deployment/#troubleshooting) table. |
 | **Release policy** | [Release policy](/gdi/release-policy/): version numbering, when releases are made, release criteria, what each release contains, which versions are supported and for how long, compatibility between versions, and the release checklist. |
 
 Pages under [Docs](/docs/) come from the upstream Funnel documentation and are

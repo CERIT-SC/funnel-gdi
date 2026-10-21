@@ -1,0 +1,23 @@
+name: Question
+description: Ask how to deploy, configure or use Funnel.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [deployment guide](https://cerit-sc.github.io/funnel-gdi/latest/gdi/deployment/) and [Troubleshooting for users](https://cerit-sc.github.io/funnel-gdi/latest/gdi/deployment/#troubleshooting-for-users) answer many questions.
+        **Do not paste passwords, tokens or signed URLs.**
+  - type: input
+    id: version
+    attributes:
+      label: Funnel version
+      description: The `version` field of `GET /v1/service-info`, or the release / image tag.
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do, and what have you tried?
+    validations:
+      required: true
