@@ -22,3 +22,10 @@ FUNNEL-AUTH-005: "Unexpected value in the 'state' query-parameter"
 FUNNEL-AUTH-006: "OIDC authentication flow failed [%s]: %s"
 FUNNEL-AUTH-007: "Failed to receive a JWT for the authorization code: %s"
 FUNNEL-AUTH-008: "permission denied: taskID: %s"
+
+# Task requests (server/tes.go)
+FUNNEL-TASK-001: "task not found: taskID: %s"
+FUNNEL-TASK-002: "Task input from SDA requires a Bearer token to be used for fetching the data, however, current authentication-context has no information about the token to use. If necessary, please provide an explicit Bearer token in the URL right after the hash-sign ('#'): sda://dataset-id/file/path#bearer-token"
+FUNNEL-TASK-003: "invalid resources: %v"
+FUNNEL-TASK-004: "error creating task: %v"
+FUNNEL-TASK-005: "rejected by the authorization plugin: %v"

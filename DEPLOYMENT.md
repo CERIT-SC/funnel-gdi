@@ -398,7 +398,7 @@ curl -s "http://localhost:8000/v1/tasks/<task-id>?view=FULL"
 | `400 Bad Request` with `… is not allowed as an input path` (or output, volume, working directory) | The path is reserved by the server, e.g. a system directory | Use a path under your own directory such as `/data` |
 | `401 Unauthorized`: `FUNNEL-AUTH-002` (token missing) or `FUNNEL-AUTH-003` (Basic-authentication failed) | No or wrong credentials | Send `-u <user>:<password>`, or `Authorization: Bearer <token>` when the server uses OIDC |
 | `401 Unauthorized`: `FUNNEL-AUTH-004` (Bearer authorization token not accepted) | The OIDC token expired or is for another service | Get a new token |
-| `404 Not Found`: `task not found: taskID: …` | Wrong task ID | Check the ID with `curl "http://localhost:8000/v1/tasks?view=MINIMAL"` |
+| `404 Not Found`: `FUNNEL-TASK-001` (task not found) | Wrong task ID | Check the ID with `curl "http://localhost:8000/v1/tasks?view=MINIMAL"` |
 | `403 Forbidden`: `FUNNEL-AUTH-008` (permission denied) | The task belongs to another user, and the server only shows tasks to their owners (`Server.TaskAccess`) | Use the account that created the task, or ask an administrator |
 | `EXECUTOR_ERROR`, `exit_code` 127 or `stderr` says `not found` | The command does not exist in the image | Use an image that contains the program, or the full path to it |
 | `EXECUTOR_ERROR` with `Permission denied` when writing a file | On Kubernetes, executors run as a non-root user and only the task's inputs, outputs, volumes and `/tmp` are writable | Write to an output path or a declared volume; use an image that works without root |

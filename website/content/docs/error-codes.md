@@ -31,6 +31,7 @@ selecting a language is not implemented yet.
 |---|---|
 | `GEN` | Funnel itself |
 | `AUTH` | Authentication (Basic, OIDC) and access to other users' tasks |
+| `TASK` | Creating, reading and canceling tasks |
 
 ## Codes
 
@@ -45,3 +46,8 @@ selecting a language is not implemented yet.
 | `FUNNEL-AUTH-006` | 500 | OIDC authentication flow failed [*error*]: *description* | The identity provider rejected the login; *error* and *description* come from it (shortened). |
 | `FUNNEL-AUTH-007` | 500 | Failed to receive a JWT for the authorization code: … | The server could not exchange the login code for a token at the identity provider. Ask the operator to check the OIDC client configuration. |
 | `FUNNEL-AUTH-008` | 403 | permission denied: taskID: … | The task belongs to another user and the server shows tasks only to their owners (`Server.TaskAccess`). Use the account that created the task, or ask an administrator. |
+| `FUNNEL-TASK-001` | 404 | task not found: taskID: … | No task has this ID (long IDs are shortened in the message). Check the ID with `GET /v1/tasks?view=MINIMAL`. |
+| `FUNNEL-TASK-002` | 400 | Task input from SDA requires a Bearer token … | An `sda://` input needs the user's OIDC token: log in with OIDC, or append the token to the URL (`sda://dataset-id/file/path#bearer-token`). |
+| `FUNNEL-TASK-003` | 400 | invalid resources: … | The task asks for more CPU, memory or disk than the server allows on Kubernetes. Ask for less, or ask the operator for the limits. |
+| `FUNNEL-TASK-004` | 500 | error creating task: … | The task could not be stored in the database. Try again; if it persists, the operator should check the server log and the database. |
+| `FUNNEL-TASK-005` | from the plugin | rejected by the authorization plugin: … | The server's authorization plugin rejected the request; the message comes from the plugin. |
