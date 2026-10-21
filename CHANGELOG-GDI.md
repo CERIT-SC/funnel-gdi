@@ -27,6 +27,7 @@ is based on, `N` is the GDI revision on top of it.
 
 ### Fixed
 
+- A server with OIDC authentication (`Server.OidcAuth`, chart value `oidc.enabled`) crashed at start-up (nil OAuth2 configuration, an upstream regression).
 - Reading or canceling another user's task (with `Server.TaskAccess: Owner` or `OwnerOrAdmin`) returned HTTP 500 instead of 403 Forbidden.
 - Task IDs from requests are shortened (256 bytes) in error messages.
 - The OIDC login echoed the identity provider's error description without a length limit; it is now shortened.

@@ -62,7 +62,7 @@ func initOidcConfig(config *config.OidcAuth) *OidcConfig {
 		os.Exit(1)
 	}
 
-	result := OidcConfig{local: config}
+	result := OidcConfig{local: config, oauth2: &oauth2.Config{}}
 	result.initConfig()
 	return &result
 }
