@@ -12,4 +12,4 @@ EOF
 # quay.io/ohsu-comp-bio/funnel-ftp-test-server image is no longer available).
 docker build -q -t funnel-ftp-test-server . > /dev/null
 
-docker run --name ftp --rm -d --env FTP_USER_UID=$(id -u) --env FTP_USER_GID=$(id -g) -p 8021:21 -p 30000-30009:30000-30009 -v `pwd`/_scratch/ftp-test/:/home/ftpusers -v `pwd`/_scratch/ftp-var:/var/ftp -v `pwd`/_scratch/passwd:/etc/pure-ftpd/passwd funnel-ftp-test-server
+docker run --name ftp --rm -d --env FTP_USER_UID=$(id -u) --env FTP_USER_GID=$(id -g) -p 8021:21 -p 30000-30059:30000-30059 -v `pwd`/_scratch/ftp-test/:/home/ftpusers -v `pwd`/_scratch/ftp-var:/var/ftp -v `pwd`/_scratch/passwd:/etc/pure-ftpd/passwd funnel-ftp-test-server

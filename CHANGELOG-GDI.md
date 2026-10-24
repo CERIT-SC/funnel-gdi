@@ -27,6 +27,7 @@ is based on, `N` is the GDI revision on top of it.
 
 ### Fixed
 
+- DynamoDB database: reading a task without a view (the TES default, MINIMAL; also used by `CancelTask`) failed with HTTP 500 (nil pointer), and `ListTasks` ignored the state, tag and owner filters, so `Server.TaskAccess: Owner` listed all users' tasks.
 - An executor's `stdin` file was truncated before the executor started (it was created instead of opened), so tasks with `stdin` always read empty input.
 - A server with OIDC authentication (`Server.OidcAuth`, chart value `oidc.enabled`) crashed at start-up (nil OAuth2 configuration, an upstream regression).
 - Reading or canceling another user's task (with `Server.TaskAccess: Owner` or `OwnerOrAdmin`) returned HTTP 500 instead of 403 Forbidden.
@@ -34,4 +35,4 @@ is based on, `N` is the GDI revision on top of it.
 - The OIDC login echoed the identity provider's error description without a length limit; it is now shortened.
 - The backend test targets (`make test-<backend>`) crashed before running any test: the test configuration lost all defaults when a `-funnel-config` file was given, and lists from the file (e.g. `MongoDB.Addrs`) were appended to the defaults instead of replacing them. The MongoDB metrics test failed with the current Prometheus client library. A storage backend could not be enabled by a test config file (`Disabled: false`), so the S3 and FTP storage tests were skipped.
 - The FTP test server image is built from `tests/ftp-test-server/Dockerfile`; the published image is no longer available.
-- S3 tests use versitygw (`make start-s3`) because MinIO no longer publishes its images; `tests/amazoncli-minio-s3.config.yml` was updated to the current `AmazonS3.AWSConfig` keys.
+- S3 tests use versitygw (`make start-s3`) because MinIO no longer publishes its images; `tests/amazoncli-minio-s3.config.yml` and `tests/dynamo.config.yml` were updated to the current `AWSConfig` keys. The Kafka tests use the `apache/kafka` image (the old `spotify/kafka` image does not work with the current client), and the FTP test server publishes its whole passive port range.
