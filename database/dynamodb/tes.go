@@ -19,12 +19,15 @@ func (db *DynamoDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.
 	var err error
 
 	switch req.View {
-	case tes.View_MINIMAL.String():
+	case tes.View_MINIMAL.String(), "":
+		// TES: the view defaults to MINIMAL.
 		response, err = db.getMinimalView(ctx, req.Id)
 	case tes.View_BASIC.String():
 		response, err = db.getBasicView(ctx, req.Id)
 	case tes.View_FULL.String():
 		response, err = db.getFullView(ctx, req.Id)
+	default:
+		return nil, fmt.Errorf("unknown view: %s", req.View)
 	}
 	if err != nil {
 		return nil, err
@@ -76,9 +79,9 @@ func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	}
 
 	if len(filters) == 1 {
-		exp.WithFilter(filters[0])
+		exp = exp.WithFilter(filters[0])
 	} else if len(filters) > 1 {
-		exp.WithFilter(expression.And(filters[0], filters[1], filters[2:]...))
+		exp = exp.WithFilter(expression.And(filters[0], filters[1], filters[2:]...))
 	}
 
 	eb, err := exp.Build()
