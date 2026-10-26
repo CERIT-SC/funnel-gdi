@@ -266,6 +266,12 @@ jobs:
               // Pinning to recent LTS release for stability/security
               container = 'ubuntu:24.04'
           }
+          // One task at a time: each task's worker pod and executor pod both
+          // request the task's CPUs, so concurrent tasks fill the runner's
+          // node with worker pods whose executor pods can never be scheduled.
+          executor {
+              queueSize = 1
+          }
           tes {
               endpoint      = 'http://localhost:8000'
               basicUsername = 'admin'
@@ -284,6 +290,7 @@ jobs:
           EOF
 
       - name: Run nf-canary tests
+        timeout-minutes: 30
         env:
           NXF_ANSI_LOG: false
         run: |
@@ -292,9 +299,11 @@ jobs:
           exit ${PIPESTATUS[0]}
 
       - name: Debug Funnel pods (on failure)
-        if: failure()
+        if: failure() || cancelled()
         run: |
+          curl -s -u "admin:${BASIC_PASSWORD}" "http://localhost:8000/v1/tasks?view=BASIC" | jq -c '.tasks[]? | {id, name, state, system_logs: [.logs[]?.system_logs[]?][-3:]}' || true
           kubectl get pods,jobs,pvc -o wide
+          kubectl describe nodes | sed -n '/Allocated resources/,/Events/p'
           kubectl describe pods
           kubectl logs deploy/funnel --tail=200 || true
           kubectl get events --sort-by='.lastTimestamp'
@@ -358,4 +367,5 @@ jobs:
             nf-canary/nextflow.log
             nf-canary/report.html
             nf-canary/.nextflow.log
+          include-hidden-files: true
           if-no-files-found: ignore
