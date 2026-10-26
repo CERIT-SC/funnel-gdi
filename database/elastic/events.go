@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/refresh"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/result"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/scriptlanguage"
 	"github.com/ohsu-comp-bio/funnel/events"
@@ -113,6 +114,8 @@ func (es *Elastic) WriteEvent(ctx context.Context, ev *events.Event) error {
 				IfSeqNo(int64ToStr(res.SeqNo_)).
 				IfPrimaryTerm(int64ToStr(res.PrimaryTerm_)).
 				Doc(map[string]string{"owner": server.GetUsername(ctx)}).
+				// Searchable at once, so ListTasks returns the new task.
+				Refresh(refresh.True).
 				Do(ctx)
 		}
 
@@ -147,6 +150,8 @@ func (es *Elastic) WriteEvent(ctx context.Context, ev *events.Event) error {
 				IfSeqNo(seqNo).
 				IfPrimaryTerm(primaryTerm).
 				Doc(map[string]string{"state": to.String()}).
+				// Searchable at once, so ListTasks filters by the new state.
+				Refresh(refresh.True).
 				Do(ctx)
 			return err
 		})
