@@ -249,11 +249,14 @@ jobs:
       # Ref: https://github.com/nextflow-io/nf-ga4gh/blob/main/.github/workflows/build.yml
       - name: Install + configure nf-canary
         run: |
+          # Pinned: a new nf-canary commit can add parameters or processes.
           git clone https://github.com/seqeralabs/nf-canary
+          git -C nf-canary checkout --quiet c4a8d4232f3fd2cb2522519c646fb08d408036ba
 
           cd nf-canary
 
-          cat <<EOF > nextflow.config
+          # Appended, so nf-canary's own params defaults stay in place.
+          cat <<EOF >> nextflow.config
           // Nextflow config file for running on TES Backend
           plugins {
             id 'nf-ga4gh'
@@ -267,25 +270,6 @@ jobs:
               endpoint      = 'http://localhost:8000'
               basicUsername = 'admin'
               basicPassword = '${BASIC_PASSWORD}'
-          }
-          params {
-              // Run all non-Fusion tests
-              skip                          = ''
-              gpu                           = false
-              run                           = ''
-              outdir                        = null
-              remoteFile                    = null
-              container                     = "quay.io/biocontainers/ubuntu:24.04"
-              fusion                        = false
-              fusion_kernel_version_min     = null
-              fusion_memory_capacity_gb_min = null
-              fusion_disk_capacity_gb_min   = null
-              fusion_nvme_required          = null
-              fusion_vcpus_min              = null
-              fusion_open_files_min         = null
-              fusion_cache_path             = '/tmp'
-              fusion_read_write_buckets     = ""
-              fusion_read_only_buckets      = ""
           }
           aws {
               accessKey = "example"

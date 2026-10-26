@@ -65,7 +65,9 @@ jobs:
 
     - name: Install nf-canary and GA4GH-TES plugin
       run: |
+        # Pinned: a new nf-canary commit can add parameters or processes.
         git clone https://github.com/seqeralabs/nf-canary
+        git -C nf-canary checkout --quiet c4a8d4232f3fd2cb2522519c646fb08d408036ba
         cd nf-canary
         cat <<EOF >> nextflow.config
           plugins {
