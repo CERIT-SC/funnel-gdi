@@ -146,16 +146,10 @@ func (b *ftpclient) Stat(ctx context.Context, url string) (*Object, error) {
 		return nil, fmt.Errorf("ftpStorage: parsing URL: %s", err)
 	}
 
-	resp, err := b.client.List(u.Path)
+	r, err := b.entry(u.Path)
 	if err != nil {
-		return nil, fmt.Errorf("ftpStorage: listing path: %q %v", u.Path, err)
+		return nil, fmt.Errorf("ftpStorage: stat %q: %v", u.Path, err)
 	}
-
-	if len(resp) != 1 {
-		return nil, fmt.Errorf("ftpStorage: object not found: %s", url)
-	}
-
-	r := resp[0]
 
 	// TODO there is a "link" file type. can we support that?
 	if r.Type != ftp.EntryTypeFile {
@@ -177,7 +171,8 @@ func (b *ftpclient) Get(ctx context.Context, url, path string) (*Object, error) 
 		return nil, err
 	}
 
-	src, err := b.client.Retr(obj.Name)
+	// The absolute path: entry() may have changed the working directory.
+	src, err := b.client.Retr("/" + obj.Name)
 	if err != nil {
 		return nil, fmt.Errorf("ftpStorage: executing RETR request: %s", err)
 	}
@@ -217,6 +212,9 @@ func (b *ftpclient) Put(ctx context.Context, url string, hostPath string) (*Obje
 	dirpath, name := pathlib.Split(u.Path)
 	if dirpath != "" {
 		for _, dir := range strings.Split(strings.Trim(dirpath, "/"), "/") {
+			if dir == "" {
+				continue // a file in the root directory
+			}
 			err := b.client.ChangeDir(dir)
 			if isUnavailable(err) {
 				// Directory doesn't exist. Create it.
@@ -245,6 +243,36 @@ func (b *ftpclient) Put(ctx context.Context, url string, hostPath string) (*Obje
 	return b.Stat(ctx, url)
 }
 
+// entry describes the file or directory at the given absolute path. MLST
+// describes either. A server without MLST gets a CWD, which only succeeds for a
+// directory, and otherwise a LIST, which lists a regular file as itself (a LIST
+// of a directory holding a single file looks the same, hence the CWD first).
+// MLSD, which List uses when the server has MLST, fails for a regular file.
+func (b *ftpclient) entry(path string) (*ftp.Entry, error) {
+	e, err := b.client.GetEntry(path)
+	if err == nil {
+		return e, nil
+	}
+	if te, ok := err.(*textproto.Error); !ok || te.Code != ftp.StatusNotImplemented {
+		return nil, err
+	}
+
+	if b.client.ChangeDir(path) == nil {
+		return &ftp.Entry{Name: pathlib.Base(path), Type: ftp.EntryTypeFolder}, nil
+	}
+
+	resp, err := b.client.List(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp) != 1 || resp[0].Type != ftp.EntryTypeFile {
+		return nil, errFTPNotFound
+	}
+	return resp[0], nil
+}
+
+var errFTPNotFound = fmt.Errorf("object not found")
+
 func isUnavailable(err error) bool {
 	e, ok := err.(*textproto.Error)
 	return ok && e.Code == ftp.StatusFileUnavailable
@@ -256,14 +284,17 @@ func (b *ftpclient) List(ctx context.Context, url string) ([]*Object, error) {
 		return nil, fmt.Errorf("ftpStorage: parsing URL: %s", err)
 	}
 
-	resp, err := b.client.List(u.Path)
+	r, err := b.entry(u.Path)
+	if err == errFTPNotFound || isUnavailable(err) {
+		// A missing path lists as empty, as with LIST.
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("ftpStorage: listing path: %q %v", u.Path, err)
 	}
 
 	// Special case where the user called List on a regular file.
-	if len(resp) == 1 && resp[0].Type == ftp.EntryTypeFile {
-		r := resp[0]
+	if r.Type == ftp.EntryTypeFile {
 		return []*Object{
 			{
 				URL:          url,
@@ -272,6 +303,11 @@ func (b *ftpclient) List(ctx context.Context, url string) ([]*Object, error) {
 				Size:         int64(r.Size),
 			},
 		}, nil
+	}
+
+	resp, err := b.client.List(u.Path)
+	if err != nil {
+		return nil, fmt.Errorf("ftpStorage: listing path: %q %v", u.Path, err)
 	}
 
 	// List the objects, recursively.
