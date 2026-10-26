@@ -28,6 +28,21 @@ func trimUnusedExecutorLogs(task *tes.Task) {
 	}
 }
 
+// taskView returns the requested view of a full task; no view means MINIMAL,
+// the TES default.
+func taskView(task *tes.Task, view string) (*tes.Task, error) {
+	switch view {
+	case tes.View_MINIMAL.String(), "":
+		return task.GetMinimalView(), nil
+	case tes.View_BASIC.String():
+		return task.GetBasicView(), nil
+	case tes.View_FULL.String():
+		return task, nil
+	default:
+		return nil, fmt.Errorf("unknown view: %s", view)
+	}
+}
+
 // The PostgreSQL struct for minimal projection (only fields outside the JSONB blob)
 type TaskCore struct {
 	ID       string `db:"id"`
@@ -41,7 +56,7 @@ var minimalView = "id, owner, state, data -> 'creation_time'" // Can't easily co
 
 // GetTask gets a task.
 func (db *Postgres) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, error) {
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(ctx)
 	defer cancel()
 
 	var selectFields string
@@ -78,22 +93,12 @@ func (db *Postgres) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.
 
 	trimUnusedExecutorLogs(&task)
 
-	switch req.View {
-	case tes.View_BASIC.String():
-		// task.Logs = tes.FilterLogs(task.Logs, tes.FilterBasic)
-		// task.Inputs = tes.FilterInputs(task.Inputs, tes.FilterBasic)
-	case tes.View_MINIMAL.String():
-		task.Logs = nil
-		task.Inputs = nil
-		task.Outputs = nil
-	}
-
-	return &task, nil
+	return taskView(&task, req.View)
 }
 
 // ListTasks returns a list of tasks.
 func (db *Postgres) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(ctx)
 	defer cancel()
 
 	pageSize := tes.GetPageSize(req.GetPageSize())
@@ -113,7 +118,7 @@ func (db *Postgres) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	// We should review this logic when we add support for UNKNOWN state tasks.
 	if req.State != tes.State_UNKNOWN {
 		whereClauses = append(whereClauses, fmt.Sprintf("state = $%d", paramCount))
-		args = append(args, req.State)
+		args = append(args, req.State.String()) // the column holds the state name
 		paramCount++
 	}
 
@@ -179,17 +184,11 @@ func (db *Postgres) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 
 		trimUnusedExecutorLogs(&task)
 
-		switch req.View {
-		case tes.View_BASIC.String():
-			// task.Logs = tes.FilterLogs(task.Logs, tes.FilterBasic)
-			// task.Inputs = tes.FilterInputs(task.Inputs, tes.FilterBasic)
-		case tes.View_MINIMAL.String():
-			task.Logs = nil
-			task.Inputs = nil
-			task.Outputs = nil
+		view, err := taskView(&task, req.View)
+		if err != nil {
+			return nil, err
 		}
-
-		tasks = append(tasks, &task)
+		tasks = append(tasks, view)
 	}
 
 	if rows.Err() != nil {

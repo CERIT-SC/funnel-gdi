@@ -54,9 +54,10 @@ func (db *Postgres) Init() error {
 	})
 }
 
-func (db *Postgres) context() (context.Context, context.CancelFunc) {
-	// Use a timeout from the configuration
-	return context.WithTimeout(context.Background(), db.conf.GetTimeout().GetDuration().AsDuration())
+func (db *Postgres) context(ctx context.Context) (context.Context, context.CancelFunc) {
+	// Use a timeout from the configuration. The parent context carries the
+	// authenticated user (server.GetUser), which the access checks need.
+	return context.WithTimeout(ctx, db.conf.GetTimeout().GetDuration().AsDuration())
 }
 
 func buildConnStr(host, user, password, database string) string {

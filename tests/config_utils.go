@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,8 @@ func TestifyConfig(conf *config.Config) *config.Config {
 	conf.MongoDB.Database = prefix
 	conf.DynamoDB.TableBasename = prefix
 	conf.Datastore.Project = prefix
+	// Unquoted Postgres identifiers: no '-'.
+	conf.Postgres.Database = strings.ReplaceAll(prefix, "-", "_")
 
 	reconcile := durationpb.New(time.Second * 5)
 	conf.HTCondor.ReconcileRate = reconcile
