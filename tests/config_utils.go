@@ -15,8 +15,6 @@ import (
 	"github.com/ohsu-comp-bio/funnel/config"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/util/fsutil"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -48,7 +46,7 @@ func DefaultConfig() *config.Config {
 		if err != nil {
 			panic(err)
 		}
-		mergeReplacingLists(conf.ProtoReflect(), proto.Clone(fileConf).ProtoReflect())
+		config.Merge(conf, fileConf)
 
 		// "Disabled: false" is a zero value, which merging cannot tell from
 		// unset: a storage section in the file decides itself.
@@ -67,20 +65,6 @@ func DefaultConfig() *config.Config {
 	}
 
 	return TestifyConfig(conf)
-}
-
-// mergeReplacingLists merges src into dst like proto.Merge, except that a list
-// set in src replaces the list in dst instead of being appended to it (e.g.
-// MongoDB.Addrs from a config file replaces the default address).
-func mergeReplacingLists(dst, src protoreflect.Message) {
-	src.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		if fd.Message() != nil && !fd.IsList() && !fd.IsMap() && dst.Has(fd) {
-			mergeReplacingLists(dst.Mutable(fd).Message(), v.Message())
-		} else {
-			dst.Set(fd, v)
-		}
-		return true
-	})
 }
 
 // TestifyConfig modifies a ports, directory paths, etc. to avoid
