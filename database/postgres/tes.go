@@ -28,21 +28,6 @@ func trimUnusedExecutorLogs(task *tes.Task) {
 	}
 }
 
-// taskView returns the requested view of a full task; no view means MINIMAL,
-// the TES default.
-func taskView(task *tes.Task, view string) (*tes.Task, error) {
-	switch view {
-	case tes.View_MINIMAL.String(), "":
-		return task.GetMinimalView(), nil
-	case tes.View_BASIC.String():
-		return task.GetBasicView(), nil
-	case tes.View_FULL.String():
-		return task, nil
-	default:
-		return nil, fmt.Errorf("unknown view: %s", view)
-	}
-}
-
 // The PostgreSQL struct for minimal projection (only fields outside the JSONB blob)
 type TaskCore struct {
 	ID       string `db:"id"`
@@ -93,7 +78,7 @@ func (db *Postgres) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.
 
 	trimUnusedExecutorLogs(&task)
 
-	return taskView(&task, req.View)
+	return task.GetView(req.View)
 }
 
 // ListTasks returns a list of tasks.
@@ -184,7 +169,7 @@ func (db *Postgres) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 
 		trimUnusedExecutorLogs(&task)
 
-		view, err := taskView(&task, req.View)
+		view, err := task.GetView(req.View)
 		if err != nil {
 			return nil, err
 		}

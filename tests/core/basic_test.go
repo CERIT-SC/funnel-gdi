@@ -1258,3 +1258,69 @@ func TestMetadataEvent(t *testing.T) {
 		}
 	}
 }
+
+// TES: no view is MINIMAL, an unknown view is an error, and ListTasks
+// filters by name prefix (with special characters taken literally).
+func TestViewDefaultAndNamePrefix(t *testing.T) {
+	tests.SetLogOutput(log, t)
+
+	f := tests.NewFunnel(tests.DefaultConfig())
+	f.StartServer()
+	ctx := context.Background()
+
+	var ids []string
+	for _, name := range []string{"prefix-a", "prefix-b", "other", "pre.fix"} {
+		id, err := f.RunTask(&tes.Task{
+			Name:      name,
+			Executors: []*tes.Executor{{Image: "alpine", Command: []string{"echo", name}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		f.Wait(id)
+	}
+
+	task, err := f.RPC.GetTask(ctx, &tes.GetTaskRequest{Id: ids[0]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Id != ids[0] || task.State != tes.State_COMPLETE || task.Name != "" || task.Executors != nil {
+		t.Errorf("GetTask without a view is not MINIMAL: %v", task)
+	}
+	if _, err := f.RPC.GetTask(ctx, &tes.GetTaskRequest{Id: ids[0], View: "BOGUS"}); err == nil {
+		t.Error("GetTask with an unknown view must fail")
+	}
+	if _, err := f.RPC.ListTasks(ctx, &tes.ListTasksRequest{View: "BOGUS"}); err == nil {
+		t.Error("ListTasks with an unknown view must fail")
+	}
+
+	r, err := f.RPC.ListTasks(ctx, &tes.ListTasksRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Tasks) != 4 || r.Tasks[0].Name != "" || r.Tasks[0].Executors != nil {
+		t.Errorf("ListTasks without a view is not MINIMAL: %v", r.Tasks)
+	}
+
+	for prefix, want := range map[string][]string{
+		"prefix-": {"prefix-b", "prefix-a"},
+		"pre.":    {"pre.fix"},
+		"pre":     {"pre.fix", "prefix-b", "prefix-a"},
+		"nothing": nil,
+	} {
+		r, err := f.RPC.ListTasks(ctx, &tes.ListTasksRequest{View: tes.View_BASIC.String(), NamePrefix: prefix})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, task := range r.Tasks {
+			got = append(got, task.Name)
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("name prefix %q: %v, want %v", prefix, got, want)
+		}
+	}
+}

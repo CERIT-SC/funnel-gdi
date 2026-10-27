@@ -28,12 +28,17 @@ type TaskOwner struct {
 }
 
 func (es *Elastic) getTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, string, string, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, "", "", err
+	}
+
 	g := es.client.Get(es.taskIndex, req.Id)
 
-	switch req.View {
-	case tes.View_MINIMAL.String():
+	switch view {
+	case tes.View_MINIMAL:
 		g = g.SourceIncludes_(minimalInclude...)
-	case tes.View_BASIC.String():
+	case tes.View_BASIC:
 		g = g.SourceExcludes_(basicExclude...)
 	}
 
@@ -71,6 +76,11 @@ func (es *Elastic) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.T
 
 // ListTasks lists tasks, duh.
 func (es *Elastic) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
+
 	pageSize := tes.GetPageSize(req.GetPageSize())
 	filters := map[string]string{}
 
@@ -107,6 +117,14 @@ func (es *Elastic) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*t
 		})
 	}
 
+	if req.NamePrefix != "" {
+		query.Bool.Filter = append(query.Bool.Filter, types.Query{
+			Prefix: map[string]types.PrefixQuery{
+				"name.keyword": {Value: req.NamePrefix},
+			},
+		})
+	}
+
 	search := es.client.Search().
 		Index(es.taskIndex).
 		Query(&query).
@@ -118,10 +136,10 @@ func (es *Elastic) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*t
 		search.SearchAfter(req.PageToken)
 	}
 
-	switch req.View {
-	case tes.View_BASIC.String():
+	switch view {
+	case tes.View_BASIC:
 		search.SourceExcludes_(basicExclude...)
-	case tes.View_MINIMAL.String():
+	case tes.View_MINIMAL:
 		search.SourceIncludes_(minimalInclude...)
 	}
 

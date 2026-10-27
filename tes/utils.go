@@ -115,6 +115,34 @@ func TerminalState(s State) bool {
 		s == State_CANCELED
 }
 
+// ParseView returns the view requested in GetTask or ListTasks. No view is
+// the TES default, MINIMAL.
+func ParseView(view string) (View, error) {
+	if view == "" {
+		return View_MINIMAL, nil
+	}
+	v, ok := View_value[view]
+	if !ok {
+		return View_MINIMAL, fmt.Errorf("unknown view: %s", view)
+	}
+	return View(v), nil
+}
+
+// GetView returns the view of a task requested in GetTask or ListTasks.
+func (task *Task) GetView(view string) (*Task, error) {
+	v, err := ParseView(view)
+	switch {
+	case err != nil:
+		return nil, err
+	case v == View_MINIMAL:
+		return task.GetMinimalView(), nil
+	case v == View_BASIC:
+		return task.GetBasicView(), nil
+	default:
+		return task, nil
+	}
+}
+
 // GetBasicView returns the basic view of a task.
 func (task *Task) GetBasicView() *Task {
 	view := &Task{}

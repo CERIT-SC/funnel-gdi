@@ -16,18 +16,19 @@ import (
 func (db *DynamoDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, error) {
 	var task *tes.Task
 	var response *dynamodb.GetItemOutput
-	var err error
 
-	switch req.View {
-	case tes.View_MINIMAL.String(), "":
-		// TES: the view defaults to MINIMAL.
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
+
+	switch view {
+	case tes.View_MINIMAL:
 		response, err = db.getMinimalView(ctx, req.Id)
-	case tes.View_BASIC.String():
+	case tes.View_BASIC:
 		response, err = db.getBasicView(ctx, req.Id)
-	case tes.View_FULL.String():
+	case tes.View_FULL:
 		response, err = db.getFullView(ctx, req.Id)
-	default:
-		return nil, fmt.Errorf("unknown view: %s", req.View)
 	}
 	if err != nil {
 		return nil, err
@@ -49,6 +50,10 @@ func (db *DynamoDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.
 
 // ListTasks returns a list of taskIDs
 func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
 
 	filters := []expression.ConditionBuilder{}
 
@@ -59,6 +64,10 @@ func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	if req.State != tes.Unknown {
 		num := int(req.State)
 		filters = append(filters, expression.Name("state").Equal(expression.Value(num)))
+	}
+
+	if req.NamePrefix != "" {
+		filters = append(filters, expression.Name("name").BeginsWith(req.NamePrefix))
 	}
 
 	for k, v := range req.GetTags() {
@@ -74,7 +83,7 @@ func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	exp := expression.NewBuilder().
 		WithKeyCondition(expression.Key(db.partitionKey).Equal(expression.Value(db.partitionValue)))
 
-	if req.View == tes.View_MINIMAL.String() {
+	if view == tes.View_MINIMAL {
 		exp = exp.WithProjection(expression.NamesList(expression.Name("id"), expression.Name("state")))
 	}
 
@@ -119,7 +128,7 @@ func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		return nil, err
 	}
 
-	if req.View == tes.View_FULL.String() {
+	if view == tes.View_FULL {
 		for _, item := range response.Items {
 			// TODO handle errors
 			_ = db.getContent(ctx, item)

@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/ohsu-comp-bio/funnel/server"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -24,12 +25,17 @@ type TaskOwner struct {
 
 // GetTask gets a task, which describes a running task
 func (db *MongoDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
+
 	var opts = options.FindOne()
 
-	switch req.View {
-	case tes.View_BASIC.String():
+	switch view {
+	case tes.View_BASIC:
 		opts = opts.SetProjection(basicView)
-	case tes.View_MINIMAL.String():
+	case tes.View_MINIMAL:
 		opts = opts.SetProjection(minimalView)
 	}
 
@@ -56,10 +62,14 @@ func (db *MongoDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.T
 
 // ListTasks returns a list of taskIDs
 func (db *MongoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
+
 	pageSize := tes.GetPageSize(req.GetPageSize())
 
 	var query = bson.M{}
-	var err error
 	if req.PageToken != "" {
 		query["id"] = bson.M{"$lt": req.PageToken}
 	}
@@ -69,7 +79,7 @@ func (db *MongoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*t
 	}
 
 	if req.NamePrefix != "" {
-		query["name"] = bson.M{"$regex": fmt.Sprintf("^%s", req.NamePrefix)}
+		query["name"] = bson.M{"$regex": "^" + regexp.QuoteMeta(req.NamePrefix)}
 	}
 
 	if userInfo := server.GetUser(ctx); !userInfo.CanSeeAllTasks() {
@@ -86,10 +96,10 @@ func (db *MongoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*t
 
 	var opts = options.Find().SetSort(bson.M{"creationtime": -1}).SetLimit(int64(pageSize))
 
-	switch req.View {
-	case tes.View_BASIC.String():
+	switch view {
+	case tes.View_BASIC:
 		opts = opts.SetProjection(basicView)
-	case tes.View_MINIMAL.String():
+	case tes.View_MINIMAL:
 		opts = opts.SetProjection(minimalView)
 	}
 
