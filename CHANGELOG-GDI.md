@@ -35,6 +35,8 @@ is based on, `N` is the GDI revision on top of it.
 - Lists in a configuration file (`--config`), e.g. `MongoDB.Addrs` or `EventWriters`, were appended to the default lists instead of replacing them, so the server with MongoDB connected to the default address `localhost` and writers from the defaults ran twice.
 - Badger, MongoDB, Elasticsearch, Datastore and DynamoDB databases: `GetTask` and `ListTasks` without a view returned the whole task instead of the MINIMAL view (the TES default), and an unknown view was not rejected (as with BoltDB). `ListTasks` ignored the `name_prefix` filter with Badger, Elasticsearch, DynamoDB and Datastore; with MongoDB, characters such as `.` in the prefix were taken as a regular expression. A `tag_key` without a `tag_value` (TES 1.1: any value of the tag) only matched an empty value with Badger, Elasticsearch, DynamoDB and Datastore.
 - BoltDB database: `ListTasks` returned the BASIC view instead of MINIMAL when filtering by tags, and accepted an unknown view.
+- Datastore database: an executor's `ignore_error` was not stored, so a failed executor stopped the task.
+- Canceling a task that finished while the request was handled returned HTTP 500 instead of success.
 - An executor's `stdin` file was truncated before the executor started (it was created instead of opened), so tasks with `stdin` always read empty input.
 - A server with OIDC authentication (`Server.OidcAuth`, chart value `oidc.enabled`) crashed at start-up (nil OAuth2 configuration, an upstream regression).
 - Reading or canceling another user's task (with `Server.TaskAccess: Owner` or `OwnerOrAdmin`) returned HTTP 500 instead of 403 Forbidden.

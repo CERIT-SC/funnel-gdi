@@ -118,6 +118,7 @@ type executor struct {
 	Image, Workdir, Stdin, Stdout, Stderr string   `datastore:",noindex,omitempty"`
 	Command                               []string `datastore:",noindex,omitempty"`
 	Env                                   []kv     `datastore:",noindex,omitempty"`
+	IgnoreError                           bool     `datastore:",noindex,omitempty"`
 }
 
 type param struct {
@@ -148,13 +149,14 @@ func marshalTask(t *tes.Task, ctx context.Context) ([]*datastore.Key, []interfac
 	}
 	for _, e := range t.Executors {
 		z.Executors = append(z.Executors, executor{
-			Image:   e.Image,
-			Workdir: e.Workdir,
-			Stdin:   e.Stdin,
-			Stdout:  e.Stdout,
-			Stderr:  e.Stderr,
-			Command: e.Command,
-			Env:     marshalMap(e.Env),
+			Image:       e.Image,
+			Workdir:     e.Workdir,
+			Stdin:       e.Stdin,
+			Stdout:      e.Stdout,
+			Stderr:      e.Stderr,
+			Command:     e.Command,
+			Env:         marshalMap(e.Env),
+			IgnoreError: e.IgnoreError,
 		})
 	}
 	for _, i := range t.Inputs {
@@ -223,13 +225,14 @@ func (c *task) unmarshal() *tes.Task {
 	}
 	for _, e := range c.Executors {
 		z.Executors = append(z.Executors, &tes.Executor{
-			Image:   e.Image,
-			Workdir: e.Workdir,
-			Stdin:   e.Stdin,
-			Stdout:  e.Stdout,
-			Stderr:  e.Stderr,
-			Command: e.Command,
-			Env:     unmarshalMap(e.Env),
+			Image:       e.Image,
+			Workdir:     e.Workdir,
+			Stdin:       e.Stdin,
+			Stdout:      e.Stdout,
+			Stderr:      e.Stderr,
+			Command:     e.Command,
+			Env:         unmarshalMap(e.Env),
+			IgnoreError: e.IgnoreError,
 		})
 	}
 	for _, i := range c.Inputs {

@@ -192,3 +192,47 @@ type noopComputer struct{}
 func (noopComputer) WriteEvent(context.Context, *events.Event) error { return nil }
 func (noopComputer) Close()                                          {}
 func (noopComputer) CheckBackendParameterSupport(*tes.Task) error    { return nil }
+
+// finishingReader is a task database with a task that finishes between the
+// two reads of CancelTask.
+type finishingReader struct {
+	notFoundReader
+	reads *int
+}
+
+func (r finishingReader) GetTask(context.Context, *tes.GetTaskRequest) (*tes.Task, error) {
+	*r.reads++
+	if *r.reads <= 1 {
+		return &tes.Task{Id: "racing", State: tes.Running}, nil
+	}
+	return &tes.Task{Id: "racing", State: tes.Complete}, nil
+}
+
+// transitionErrorWriter rejects the state change, as a database does when the
+// task has already finished.
+type transitionErrorWriter struct{}
+
+func (transitionErrorWriter) WriteEvent(context.Context, *events.Event) error {
+	return &tes.TransitionError{From: tes.Complete, To: tes.Canceled}
+}
+
+func (transitionErrorWriter) Close() {}
+
+func TestCancelTaskFinishingMeanwhile(t *testing.T) {
+	reads := 0
+	ts := &TaskService{
+		Read:   finishingReader{reads: &reads},
+		Event:  transitionErrorWriter{},
+		Config: config.DefaultConfig(),
+		Log:    logger.NewLogger("test", logger.DefaultConfig()),
+	}
+	if _, err := ts.CancelTask(context.Background(), &tes.CancelTaskRequest{Id: "racing"}); err != nil {
+		t.Fatalf("a task that finished meanwhile: %v", err)
+	}
+
+	// A task that is still running when the update fails is an error.
+	reads = -10
+	if _, err := ts.CancelTask(context.Background(), &tes.CancelTaskRequest{Id: "racing"}); err == nil {
+		t.Fatal("expected the update error")
+	}
+}

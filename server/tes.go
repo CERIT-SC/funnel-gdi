@@ -281,6 +281,12 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 	} else if err == tes.ErrNotPermitted {
 		return result, errcodes.Status(codes.PermissionDenied, "FUNNEL-AUTH-008", taskIDForMessage(req.Id))
 	} else if err != nil {
+		// The task can finish between the check above and the update; then
+		// there is nothing to cancel, as for a task that was already finished.
+		if task, gerr := ts.Read.GetTask(ctx, &tes.GetTaskRequest{Id: req.Id}); gerr == nil && tes.TerminalState(task.State) {
+			ts.Log.Info("Task finished before it was canceled", "taskId", req.Id, "state", task.State)
+			return result, nil
+		}
 		return result, err
 	}
 

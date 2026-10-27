@@ -1368,3 +1368,29 @@ func TestListTaskFilterTagKey(t *testing.T) {
 		}
 	}
 }
+
+// ignore_error is stored with the task: the worker reads the task from the
+// database and runs the next executor after a failed one.
+func TestIgnoreErrorStored(t *testing.T) {
+	tests.SetLogOutput(log, t)
+
+	f := tests.NewFunnel(tests.DefaultConfig())
+	f.StartServer()
+
+	id, err := f.RunTask(&tes.Task{
+		Executors: []*tes.Executor{
+			{Image: "alpine", Command: []string{"sh", "-c", "exit 1"}, IgnoreError: true},
+			{Image: "alpine", Command: []string{"echo", "second"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := f.Wait(id)
+	if !task.Executors[0].IgnoreError {
+		t.Error("ignore_error was not stored")
+	}
+	if logs := task.Logs[0].Logs; len(logs) != 2 || logs[1].Stdout != "second\n" {
+		t.Errorf("the second executor did not run: %v", logs)
+	}
+}
