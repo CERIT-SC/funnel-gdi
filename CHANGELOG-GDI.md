@@ -22,7 +22,7 @@ is based on, `N` is the GDI revision on top of it.
 - CI runs the component tests against real databases, event streams and storage (Postgres, MongoDB, Elasticsearch, Badger, DynamoDB local, Datastore and Pub/Sub emulators, Kafka, S3-compatible storage, FTP); their coverage counts toward the total.
 - Acceptance tests with coverage: the `Acceptance Tests` workflow builds Funnel with coverage instrumentation (`make build-cover`), runs the TES compliance suite, the Nextflow nf-canary workflow and the Kubernetes integration tests against it, reports the merged coverage per package and fails below `ACCEPTANCE_COVERAGE_MIN`.
 - Kubernetes integration tests run the GDI Helm chart (`deploy-guide/kubernetes`) on a kind cluster on every push and pull request to `master` (before: the upstream chart, only on the unused `develop` branch).
-- The TES compliance suite also runs with the Postgres database and with S3 storage.
+- The TES compliance suite also runs with the Postgres database and with S3 storage, and once each with the Badger, MongoDB, Elasticsearch, DynamoDB and Datastore databases.
 - Helm chart values `imagePullPolicy` (default `Always`) and `funnel.extraEnv` (extra environment variables of the server container).
 
 ### Fixed
@@ -32,6 +32,9 @@ is based on, `N` is the GDI revision on top of it.
 - Elasticsearch database: a task or its new state was not visible to `ListTasks` until the next index refresh (up to a second).
 - FTP storage: a file could not be found on servers with MLST (e.g. current pure-ftpd), a directory with a single file was taken for that file on servers without MLST, and uploading to the root directory failed on some servers.
 - DynamoDB database: reading a task without a view (the TES default, MINIMAL; also used by `CancelTask`) failed with HTTP 500 (nil pointer), and `ListTasks` ignored the state, tag and owner filters, so `Server.TaskAccess: Owner` listed all users' tasks.
+- Lists in a configuration file (`--config`), e.g. `MongoDB.Addrs` or `EventWriters`, were appended to the default lists instead of replacing them, so the server with MongoDB connected to the default address `localhost` and writers from the defaults ran twice.
+- Badger, MongoDB, Elasticsearch, Datastore and DynamoDB databases: `GetTask` and `ListTasks` without a view returned the whole task instead of the MINIMAL view (the TES default), and an unknown view was not rejected (as with BoltDB). `ListTasks` ignored the `name_prefix` filter with Badger, Elasticsearch, DynamoDB and Datastore; with MongoDB, characters such as `.` in the prefix were taken as a regular expression.
+- BoltDB database: `ListTasks` returned the BASIC view instead of MINIMAL when filtering by tags, and accepted an unknown view.
 - An executor's `stdin` file was truncated before the executor started (it was created instead of opened), so tasks with `stdin` always read empty input.
 - A server with OIDC authentication (`Server.OidcAuth`, chart value `oidc.enabled`) crashed at start-up (nil OAuth2 configuration, an upstream regression).
 - Reading or canceling another user's task (with `Server.TaskAccess: Owner` or `OwnerOrAdmin`) returned HTTP 500 instead of 403 Forbidden.

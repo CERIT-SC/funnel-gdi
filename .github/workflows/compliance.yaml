@@ -42,6 +42,14 @@ jobs:
         storage:
           - local
           - s3
+        # The other databases once each: the storage does not change which
+        # database code runs.
+        include:
+          - {version: 1.1.0, db: badger, compute: local, storage: local}
+          - {version: 1.1.0, db: mongodb, compute: local, storage: local}
+          - {version: 1.1.0, db: elastic, compute: local, storage: local}
+          - {version: 1.1.0, db: dynamodb, compute: local, storage: local}
+          - {version: 1.1.0, db: datastore, compute: local, storage: local}
     runs-on: ubuntu-latest
     steps:
       # Required to access the tests config files (e.g. tests/postgres.config.yml)
@@ -63,16 +71,49 @@ jobs:
         run: |
           touch config.yml
 
-          if [ ${{ matrix.db }} = "postgres" ]; then
-            make start-postgres
-            for i in $(seq 1 30); do
-              docker exec funnel-postgres-test pg_isready -U postgres && break
-              echo "Waiting for Postgres... ($i/30)"
+          # wait_for <name> <command>: retries the command for up to 120 s.
+          wait_for() {
+            for i in $(seq 1 120); do
+              eval "$2" > /dev/null 2>&1 && return 0
+              echo "Waiting for $1... ($i/120)"
               sleep 1
-              [ $i -eq 30 ] && { echo "Postgres did not become ready in time"; exit 1; }
             done
-            cat `pwd`/tests/postgres.config.yml >> config.yml
-          fi
+            echo "$1 did not become ready in time"
+            exit 1
+          }
+
+          case ${{ matrix.db }} in
+            postgres)
+              make start-postgres
+              wait_for Postgres "docker exec funnel-postgres-test pg_isready -U postgres"
+              cat `pwd`/tests/postgres.config.yml >> config.yml
+              ;;
+            mongodb)
+              make start-mongodb
+              wait_for MongoDB "docker exec funnel-mongodb-test mongosh --quiet --eval 'db.runCommand({ping: 1})'"
+              cat `pwd`/tests/mongo.config.yml >> config.yml
+              ;;
+            elastic)
+              make start-elasticsearch
+              wait_for Elasticsearch "curl -sf http://localhost:9200/_cluster/health"
+              cat `pwd`/tests/elastic.config.yml >> config.yml
+              ;;
+            dynamodb)
+              make start-dynamodb
+              # Answers 400 without a request, but only once it is up.
+              wait_for DynamoDB "curl -s http://localhost:18000"
+              cat `pwd`/tests/dynamo.config.yml >> config.yml
+              ;;
+            datastore)
+              make start-datastore
+              wait_for Datastore "curl -sf http://localhost:12432"
+              export DATASTORE_EMULATOR_HOST=localhost:12432
+              cat `pwd`/tests/datastore.config.yml >> config.yml
+              ;;
+            badger)
+              cat `pwd`/tests/badger.config.yml >> config.yml
+              ;;
+          esac
 
           if [ ${{ matrix.storage }} = "s3" ]; then
             make start-s3
