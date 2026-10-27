@@ -34,7 +34,7 @@ A version is released only when all of these hold:
 
 | Criterion | Checked by |
 |---|---|
-| CI is green on `master`: unit and component tests including their coverage gate (`COVERAGE_MIN` in `.github/workflows/tests.yaml`), acceptance tests (TES compliance) including their coverage gate (`ACCEPTANCE_COVERAGE_MIN` in `.github/workflows/acceptance.yaml`), Nextflow, documentation site build and links | GitHub Actions |
+| CI is green on `master`: unit and component tests including their coverage gate (`COVERAGE_MIN` in `.github/workflows/tests.yaml`, at least 75%), acceptance tests (TES compliance) including their coverage gate (`ACCEPTANCE_COVERAGE_MIN` in `.github/workflows/acceptance.yaml`), Nextflow, documentation site build and links | GitHub Actions |
 | `README.md` and `DEPLOYMENT.md` name the version, the Helm chart's `appVersion` matches | `scripts/check-docs-version.sh`, run again by the `Git Tag` workflow, which stops the release otherwise |
 | The documentation has been reviewed against the changes | [Checklist](#release-checklist), step 3 |
 | The platforms listed as "Tested" in `DEPLOYMENT.md` have been re-tested for this version | [Checklist](#release-checklist), step 4 |

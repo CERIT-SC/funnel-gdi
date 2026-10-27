@@ -36,6 +36,9 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        # The TES OpenAPI document, for the util/openapi2proto test
+        submodules: true
 
     - name: Set up Go 1.x
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -142,7 +145,7 @@ jobs:
       # Minimum total statement coverage (percent) of the unit and component
       # tests together, without generated code and tests/ helpers
       # (scripts/coverage). May only be raised (AGENTS.md, INV-11).
-      COVERAGE_MIN: 50
+      COVERAGE_MIN: 75
       BACKENDS: postgres mongodb elasticsearch badger dynamodb datastore kafka pubsub generic-s3 ftp
     steps:
     - name: Check out code
