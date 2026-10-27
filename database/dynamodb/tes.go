@@ -70,14 +70,13 @@ func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		filters = append(filters, expression.Name("name").BeginsWith(req.NamePrefix))
 	}
 
+	// A tag key without a value matches any value of the tag.
 	for k, v := range req.GetTags() {
-		var fieldValue expression.ValueBuilder
 		if v == "" {
-			fieldValue = expression.Value(expression.Null)
+			filters = append(filters, expression.Name("tags."+k).AttributeExists())
 		} else {
-			fieldValue = expression.Value(v)
+			filters = append(filters, expression.Name("tags."+k).Equal(expression.Value(v)))
 		}
-		filters = append(filters, expression.Name("tags."+k).Equal(fieldValue))
 	}
 
 	exp := expression.NewBuilder().

@@ -104,7 +104,14 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		q = q.FilterField("State", "=", int32(req.State))
 	}
 
+	// A tag key without a value matches any value of the tag; TagStrings
+	// only has key:value pairs, so such tags are checked below.
+	var tagKeys []string
 	for k, v := range req.GetTags() {
+		if v == "" {
+			tagKeys = append(tagKeys, k)
+			continue
+		}
 		q = q.FilterField("TagStrings", "=", encodeKV(k, v))
 	}
 
@@ -130,6 +137,9 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 			continue
 		}
 		task := t.unmarshal()
+		if !hasTagKeys(task, tagKeys) {
+			continue
+		}
 
 		switch view {
 		case tes.View_MINIMAL:
@@ -161,4 +171,13 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	}
 
 	return resp, nil
+}
+
+func hasTagKeys(task *tes.Task, keys []string) bool {
+	for _, k := range keys {
+		if _, ok := task.Tags[k]; !ok {
+			return false
+		}
+	}
+	return true
 }

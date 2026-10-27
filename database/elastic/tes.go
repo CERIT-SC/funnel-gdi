@@ -92,7 +92,13 @@ func (es *Elastic) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*t
 		filters["state"] = req.State.String()
 	}
 
+	// A tag key without a value matches any value of the tag.
+	var tagKeys []string
 	for k, v := range req.GetTags() {
+		if v == "" {
+			tagKeys = append(tagKeys, k)
+			continue
+		}
 		field := fmt.Sprintf("tags.%s.keyword", k)
 		filters[field] = v
 	}
@@ -114,6 +120,12 @@ func (es *Elastic) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*t
 			Term: map[string]types.TermQuery{
 				key: {Value: value},
 			},
+		})
+	}
+
+	for _, k := range tagKeys {
+		query.Bool.Filter = append(query.Bool.Filter, types.Query{
+			Exists: &types.ExistsQuery{Field: fmt.Sprintf("tags.%s", k)},
 		})
 	}
 

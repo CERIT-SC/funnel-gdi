@@ -1324,3 +1324,47 @@ func TestViewDefaultAndNamePrefix(t *testing.T) {
 		}
 	}
 }
+
+// TES 1.1: a tag key without a value matches any value of that tag.
+func TestListTaskFilterTagKey(t *testing.T) {
+	tests.SetLogOutput(log, t)
+
+	f := tests.NewFunnel(tests.DefaultConfig())
+	f.StartServer()
+	ctx := context.Background()
+
+	for _, tags := range []map[string]string{
+		{"a": "1", "b": "2"},
+		{"a": "3"},
+		{"c": ""},
+	} {
+		id, err := f.RunTask(&tes.Task{
+			Tags:      tags,
+			Executors: []*tes.Executor{{Image: "alpine", Command: []string{"echo"}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Wait(id)
+	}
+
+	for _, tc := range []struct {
+		keys, values []string
+		want         int
+	}{
+		{[]string{"a"}, nil, 2},
+		{[]string{"a", "b"}, []string{"1"}, 1},
+		{[]string{"b", "a"}, []string{"2"}, 1},
+		{[]string{"c"}, nil, 1},
+		{[]string{"a", "x"}, []string{"1"}, 0},
+		{[]string{"a"}, []string{"9"}, 0},
+	} {
+		r, err := f.HTTP.ListTasks(ctx, &tes.ListTasksRequest{View: tes.View_BASIC.String(), TagKey: tc.keys, TagValue: tc.values})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Tasks) != tc.want {
+			t.Errorf("tag_key %v tag_value %v: %d tasks, want %d", tc.keys, tc.values, len(r.Tasks), tc.want)
+		}
+	}
+}

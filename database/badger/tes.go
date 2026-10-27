@@ -91,7 +91,7 @@ func (db *Badger) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*te
 			// Filter tasks by tag.
 			for k, v := range req.GetTags() {
 				tval, ok := task.Tags[k]
-				if !ok || tval != v {
+				if !ok || (v != "" && tval != v) {
 					continue taskLoop
 				}
 			}
