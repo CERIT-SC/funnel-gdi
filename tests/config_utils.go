@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"path"
 	"strings"
@@ -103,12 +104,16 @@ func TestifyConfig(conf *config.Config) *config.Config {
 	return conf
 }
 
-// RandomPort returns a random port string between 10000 and 20000.
+// RandomPort returns a free port.
 func RandomPort() string {
-	min := 10000
-	max := 40000
-	n := rand.Intn(max-min) + min
-	return fmt.Sprintf("%d", n)
+	// Let the kernel pick a free port: a random number could be in use, e.g.
+	// by an outgoing connection to the test database.
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	return fmt.Sprintf("%d", l.Addr().(*net.TCPAddr).Port)
 }
 
 // RandomPortConfig returns a modified config with random HTTP and RPC ports.
