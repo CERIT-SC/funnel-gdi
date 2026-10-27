@@ -6,6 +6,8 @@
 #  - nextflow.yaml: nf-canary workflow through Nextflow's TES executor
 #  - integration-tests.yaml: the GDI Helm chart on a kind cluster (Kubernetes
 #    compute backend), a TES task and nf-canary
+#  - scenarios.yaml: tests/acceptance/scenarios.sh (CLI, dashboard, scheduler
+#    mode with a node, Slurm backend with fake commands)
 #
 # Each suite stops Funnel gracefully, converts its coverage data
 # ("go tool covdata textfmt") and uploads it as a "coverage-acceptance-*"
@@ -47,17 +49,21 @@ jobs:
     needs: build
     uses: ./.github/workflows/integration-tests.yaml
 
+  scenarios:
+    needs: build
+    uses: ./.github/workflows/scenarios.yaml
+
   coverage:
-    needs: [compliance, nextflow, kubernetes]
+    needs: [compliance, nextflow, kubernetes, scenarios]
     if: always()
     runs-on: ubuntu-latest
     env:
       # Minimum total statement coverage (percent) of the acceptance tests,
       # without generated code and tests/ helpers (scripts/coverage).
       # May only be raised (AGENTS.md, INV-11).
-      ACCEPTANCE_COVERAGE_MIN: 24
+      ACCEPTANCE_COVERAGE_MIN: 50
       # Profile name prefixes the suites upload (reported when missing)
-      SUITES: compliance nextflow kubernetes
+      SUITES: compliance nextflow kubernetes scenarios
     steps:
     - name: Check out code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

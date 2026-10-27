@@ -20,7 +20,7 @@ is based on, `N` is the GDI revision on top of it.
 - "Troubleshooting for users" in the deployment guide: what each task state means, how to read a task's logs, and common problems with their causes and fixes. "Getting help" explains where to ask (GitHub issues with templates for bugs and questions) and what to include.
 - CI reports the statement coverage of the unit and component tests per package (job summary and the `coverage` artifact with an HTML report) and fails when it drops below the minimum `COVERAGE_MIN` (75%). Run `make test-coverage` for the same report locally.
 - CI runs the component tests against real databases, event streams and storage (Postgres, MongoDB, Elasticsearch, Badger, DynamoDB local, Datastore and Pub/Sub emulators, Kafka, S3-compatible storage, FTP); their coverage counts toward the total.
-- Acceptance tests with coverage: the `Acceptance Tests` workflow builds Funnel with coverage instrumentation (`make build-cover`), runs the TES compliance suite, the Nextflow nf-canary workflow and the Kubernetes integration tests against it, reports the merged coverage per package and fails below `ACCEPTANCE_COVERAGE_MIN`.
+- Acceptance tests with coverage: the `Acceptance Tests` workflow builds Funnel with coverage instrumentation (`make build-cover`), runs the TES compliance suite, the Nextflow nf-canary workflow, the Kubernetes integration tests and the acceptance scenarios (`tests/acceptance/scenarios.sh`: CLI, terminal dashboard, scheduler mode, HPC backends with fake commands, basic authentication, standalone worker) against it, reports the merged coverage per package and fails below `ACCEPTANCE_COVERAGE_MIN` (50%).
 - Kubernetes integration tests run the GDI Helm chart (`deploy-guide/kubernetes`) on a kind cluster on every push and pull request to `master` (before: the upstream chart, only on the unused `develop` branch).
 - The TES compliance suite also runs with the Postgres database and with S3 storage, and once each with the Badger, MongoDB, Elasticsearch, DynamoDB and Datastore databases.
 - Helm chart values `imagePullPolicy` (default `Always`) and `funnel.extraEnv` (extra environment variables of the server container).
@@ -37,6 +37,7 @@ is based on, `N` is the GDI revision on top of it.
 - BoltDB database: `ListTasks` returned the BASIC view instead of MINIMAL when filtering by tags, and accepted an unknown view.
 - Datastore database: an executor's `ignore_error` was not stored, so a failed executor stopped the task.
 - Canceling a task that finished while the request was handled returned HTTP 500 instead of success.
+- A node (`funnel node run`) with the default `Node.Timeout` (`disabled: true`) shut down after its first task.
 - An executor's `stdin` file was truncated before the executor started (it was created instead of opened), so tasks with `stdin` always read empty input.
 - A server with OIDC authentication (`Server.OidcAuth`, chart value `oidc.enabled`) crashed at start-up (nil OAuth2 configuration, an upstream regression).
 - Reading or canceling another user's task (with `Server.TaskAccess: Owner` or `OwnerOrAdmin`) returned HTTP 500 instead of 403 Forbidden.
