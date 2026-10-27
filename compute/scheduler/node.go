@@ -34,7 +34,7 @@ func NewNodeProcess(ctx context.Context, conf *config.Config, factory Worker, lo
 		log.Error("error detecting resources", "error", derr)
 	}
 
-	timeout := util.NewIdleTimeout(conf.Node.Timeout.GetDuration().AsDuration())
+	timeout := idleTimeout(conf.Node)
 	state := NodeState_UNINITIALIZED
 
 	return &NodeProcess{
@@ -107,6 +107,17 @@ func (n *NodeProcess) Run(ctx context.Context) error {
 			n.checkDrain()
 		}
 	}
+}
+
+// idleTimeout is the node's idle timeout: none without a duration (the
+// default "disabled: true"), which would otherwise be 0, i.e. shutting
+// down after the first task.
+func idleTimeout(conf *config.Node) util.IdleTimeout {
+	d := conf.GetTimeout().GetDuration()
+	if d == nil {
+		return util.NoIdleTimeout()
+	}
+	return util.NewIdleTimeout(d.AsDuration())
 }
 
 func (n *NodeProcess) checkConnection(ctx context.Context) {
