@@ -8,6 +8,9 @@ on:
 jobs:
   nextflow:
     runs-on: ubuntu-latest
+    # A passing run takes about 2 minutes; a stalled workflow fails here
+    # instead of after GitHub's 6-hour job limit.
+    timeout-minutes: 30
     steps:
     - name: Download Funnel
       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -92,6 +95,10 @@ jobs:
         done
         echo "Funnel did not stop within 30 s; no coverage data will be written"
         kill -KILL "$pid"
+
+    - name: Show Funnel log
+      if: failure() || cancelled()
+      run: tail -n 300 funnel.logs
 
     - name: Coverage profile
       if: always()
