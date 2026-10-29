@@ -27,8 +27,8 @@ import (
 )
 
 // generated matches files that are generated, not written by hand: Protobuf
-// and gRPC gateway code, go-bindata bundles and mockery mocks. Keep in sync
-// with INV-1 in AGENTS.md.
+// and gRPC gateway code, the web dashboard bundle, go-bindata bundles and
+// mockery mocks.
 var generated = regexp.MustCompile(`(\.pb\.go|\.pb\.gw\.go|^webdash/web\.go|/internal/bundle\.go|/mock_[^/]+\.go)$`)
 
 // blockLine matches "file:startLine.startCol,endLine.endCol numStmts count".

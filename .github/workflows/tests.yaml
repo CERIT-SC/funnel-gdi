@@ -144,7 +144,7 @@ jobs:
     env:
       # Minimum total statement coverage (percent) of the unit and component
       # tests together, without generated code and tests/ helpers
-      # (scripts/coverage). May only be raised (AGENTS.md, INV-11).
+      # (scripts/coverage). May only be raised, never lowered.
       COVERAGE_MIN: 75
       BACKENDS: postgres mongodb elasticsearch badger dynamodb datastore kafka pubsub generic-s3 ftp
     steps:

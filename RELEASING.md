@@ -98,9 +98,9 @@ release notes.
      run the commands in "Testing the server", uninstall. Record
      `kubectl version` (server) and `helm version`.
    - Web dashboard: start a server (Option 1), submit the hello-world task
-     from "Testing the server" and run
-     `node scripts/dashboard-smoke-test.mjs http://localhost:8000 <task-id> build/dashboard-test`
-     (setup in the script header). Record the browser version it prints.
+     from "Testing the server", open `http://localhost:8000` in the browser
+     and check that the task list and the task's page show it. Record the
+     browser version.
      If the dashboard bundle changed, check its minimum Chrome version with
      `npx es-check` on `/static/js/main.*.js`.
 5. **Check.** `scripts/check-docs-version.sh X.Y.Z.N` must pass.

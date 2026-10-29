@@ -42,3 +42,8 @@ website/resources
 
 # Binary built by `make build`
 /funnel
+
+# Developer-only files, kept outside git
+AGENTS.md
+CHANGELOG-GDI.md
+scripts/dashboard-smoke-test.mjs

@@ -20,7 +20,7 @@ separate PR. Last synced with upstream: `eff51273` (2026-09-02, v0.12.x).
 
 GDI-only (not meant for upstream):
 
-- `AGENTS.md` – commands, verification chain and invariants for coding agents; `make lint` runs golangci-lint v2 with `.golangci.yml` and the `go.mod` Go version, as CI does.
+- `make lint` runs golangci-lint v2 with `.golangci.yml` and the `go.mod` Go version, as CI does.
 - Coverage tooling: `scripts/coverage/` (merges Go coverage profiles, leaves out generated code and `tests/` helpers, per-package report, `-min` gate; tests in `scripts/coverage/main_test.go`), `make test-coverage`; `.github/workflows/tests.yaml` runs the backend component tests (`COVER_DIR` on the `test-<backend>` Makefile targets), publishes the merged coverage report (job summary, artifact `coverage`) and enforces `COVERAGE_MIN`. Acceptance tests: `.github/workflows/acceptance.yaml` builds a coverage-instrumented binary (`make build-cover`, `build.yaml` input `cover`), runs `compliance.yaml`, `nextflow.yaml`, `integration-tests.yaml` (the GDI chart on kind, S3 via versitygw) and `scenarios.yaml` (`tests/acceptance/scenarios.sh`: CLI, terminal dashboard, scheduler mode with a node, Slurm, PBS, Grid Engine and HTCondor with fake commands, basic authentication, standalone worker, S3/FTP/HTTP storage) against it, merges the coverage (artifact `acceptance-coverage`) and enforces `ACCEPTANCE_COVERAGE_MIN`.
 - `Dockerfile.dind` – image with Docker CLI for the local/manual worker with the Docker executor.
 - `.github/workflows/git-tag.yaml` – publishes `ghcr.io/<repo>:<tag>` on git tags / manual dispatch; `workflow_dispatch` on CI workflows.
@@ -30,7 +30,7 @@ GDI-only (not meant for upstream):
 - Postgres schema migrations: `database/postgres/migrations/*.sql` (human-readable, applied in order and recorded in `schema_version`), `database/postgres/migrate.go`; tests in `database/postgres/migrate_test.go`.
 - Error codes: package `errcodes` (`errcodes.Status` / `errcodes.Message`, messages in `errcodes/messages.en.yaml`), reference page `website/content/docs/error-codes.md`; tests in `errcodes/errcodes_test.go` (catalog validation, page in sync with the catalog, every code used in the code is defined).
 - End-user support: "Troubleshooting for users" and "Getting help" in `DEPLOYMENT.md` (linked from `website/content/gdi.md` and `website/content/docs/tasks.md`), issue templates `.github/ISSUE_TEMPLATE/{bug_report,question,config}.yml`.
-- Release and documentation process: `RELEASING.md` (release policy and checklist), `scripts/dashboard-smoke-test.mjs` (browser test of the web dashboard), `scripts/check-docs-version.sh` (run by `git-tag.yaml` for `X.Y.Z.N` tags, which also creates the GitHub Release), `.github/workflows/docs.yaml` (website build + link check on PRs to `master`), `.github/pull_request_template.md`. `CHANGELOG.md` stays the upstream changelog.
+- Release and documentation process: `RELEASING.md` (release policy and checklist), `scripts/check-docs-version.sh` (run by `git-tag.yaml` for `X.Y.Z.N` tags, which also creates the GitHub Release), `.github/workflows/docs.yaml` (website build + link check on PRs to `master`). `CHANGELOG.md` stays the upstream changelog.
 
 ## Keeping in sync with upstream
 

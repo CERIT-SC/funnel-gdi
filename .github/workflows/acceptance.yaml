@@ -60,7 +60,7 @@ jobs:
     env:
       # Minimum total statement coverage (percent) of the acceptance tests,
       # without generated code and tests/ helpers (scripts/coverage).
-      # May only be raised (AGENTS.md, INV-11).
+      # May only be raised, never lowered.
       ACCEPTANCE_COVERAGE_MIN: 50
       # Profile name prefixes the suites upload (reported when missing)
       SUITES: compliance nextflow kubernetes scenarios
