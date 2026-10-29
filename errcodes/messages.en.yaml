@@ -8,10 +8,24 @@
 #   - Codes are permanent: never reuse or renumber one, only add new ones.
 #   - Every code is documented in website/content/docs/error-codes.md (a test
 #     checks this).
-#   - A translation is a copy of this file named messages.<language>.yaml
-#     with the same codes and translated messages.
+#   - A translation is a file named messages.<language>.yaml with codes of
+#     this file and translated messages with the same fmt verbs in the same
+#     order; codes it leaves out keep the English message. It is selected
+#     with the config ErrorMessages.Language (and ErrorMessages.Dir for a
+#     file outside Funnel).
 
 FUNNEL-GEN-000: "internal error (unknown code %s)"
+
+# Errors without a more specific code (errcodes.Ensure), by gRPC code; the
+# argument is the original message.
+FUNNEL-GEN-001: "invalid request: %s"
+FUNNEL-GEN-002: "not found: %s"
+FUNNEL-GEN-003: "authentication required: %s"
+FUNNEL-GEN-004: "permission denied: %s"
+FUNNEL-GEN-005: "conflict: %s"
+FUNNEL-GEN-006: "request canceled or timed out: %s"
+FUNNEL-GEN-007: "not supported: %s"
+FUNNEL-GEN-008: "internal error: %s"
 
 # Authentication and access (server/auth.go, server/auth_oidc.go)
 FUNNEL-AUTH-001: "Missing metadata in the context"
@@ -22,6 +36,9 @@ FUNNEL-AUTH-005: "Unexpected value in the 'state' query-parameter"
 FUNNEL-AUTH-006: "OIDC authentication flow failed [%s]: %s"
 FUNNEL-AUTH-007: "Failed to receive a JWT for the authorization code: %s"
 FUNNEL-AUTH-008: "permission denied: taskID: %s"
+FUNNEL-AUTH-009: "Only GET method is supported"
+FUNNEL-AUTH-010: "User authentication is required (Basic authentication with username and password)"
+FUNNEL-AUTH-011: "Missing 'jwt' cookie. Please log in first."
 
 # Task requests (server/tes.go)
 FUNNEL-TASK-001: "task not found: taskID: %s"
@@ -53,3 +70,28 @@ FUNNEL-VAL-017: 'Task.Outputs[%d].Path: %q is not allowed as an output path'
 FUNNEL-VAL-018: 'Task.Volumes[%d]: must be an absolute path'
 FUNNEL-VAL-019: 'Task.Volumes[%d]: %q is not allowed as a volume path'
 FUNNEL-VAL-020: 'Task.Tags[""]=%s: empty key'
+
+# Task system logs (logs[].system_logs of a task): errors and warnings of the
+# worker, the scheduler and the compute backends
+FUNNEL-RUN-001: "System error"
+FUNNEL-RUN-002: "Exec error"
+FUNNEL-RUN-003: "Failed to upload outputs after executor error"
+FUNNEL-RUN-004: "Couldn't prepare log files"
+FUNNEL-RUN-005: "failed to get task. ID unknown"
+FUNNEL-RUN-006: "failed to sync docker client API version"
+FUNNEL-RUN-007: "failed to pull docker image using command"
+FUNNEL-RUN-008: "failed to run docker container"
+FUNNEL-RUN-009: "failed to stop docker container"
+FUNNEL-RUN-010: "download source directory is empty"
+FUNNEL-RUN-011: "upload source directory is empty"
+FUNNEL-RUN-012: "download failed"
+FUNNEL-RUN-013: "upload failed"
+FUNNEL-RUN-014: "Error in AssignTask"
+FUNNEL-RUN-015: "error submitting task to %s"
+FUNNEL-RUN-016: "%s reports system error for task"
+FUNNEL-RUN-017: "%s job in FAILED state"
+FUNNEL-RUN-018: "Error cleaning up compute resources during cancel"
+FUNNEL-RUN-019: "Kubernetes worker pod has a terminal container waiting error"
+FUNNEL-RUN-020: "Kubernetes worker job failed to create pod"
+FUNNEL-RUN-021: "Kubernetes job not found for task"
+FUNNEL-RUN-022: "GCP Batch job failed: %s"

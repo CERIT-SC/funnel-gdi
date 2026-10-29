@@ -175,10 +175,10 @@ func TestGCPReconcile(t *testing.T) {
 	if st := ev.states("not-ours"); len(st) != 0 {
 		t.Errorf("a job without a Funnel task must be ignored: %v", st)
 	}
-	if msgs := ev.logMessages("failed"); !contains(msgs, "Task failed: exit code 1") {
+	if msgs := ev.logMessages("failed"); !contains(msgs, "FUNNEL-RUN-022: GCP Batch job failed: Task failed: exit code 1") {
 		t.Errorf("failure reason not logged: %v", msgs)
 	}
-	if msgs := ev.logMessages("failed-no-reason"); !contains(msgs, "GCP Batch job in FAILED state") {
+	if msgs := ev.logMessages("failed-no-reason"); !contains(msgs, "FUNNEL-RUN-017: GCP Batch job in FAILED state") {
 		t.Errorf("default failure reason not logged: %v", msgs)
 	}
 	if msgs := ev.logMessages("done"); !contains(msgs, "hello from the task") {

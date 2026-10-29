@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/batch"
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -122,7 +123,7 @@ func (b *Backend) Submit(task *tes.Task) error {
 			ctx,
 			events.NewSystemLog(
 				task.Id, 0, 0, "error",
-				"error submitting task to AWSBatch",
+				errcodes.Message("FUNNEL-RUN-015", "AWSBatch"),
 				map[string]string{"error": err.Error()},
 			),
 		)
@@ -236,7 +237,7 @@ ReconcileLoop:
 								ctx,
 								events.NewSystemLog(
 									task.Id, 0, 0, "error",
-									"AWSBatch job in FAILED state",
+									errcodes.Message("FUNNEL-RUN-017", "AWSBatch"),
 									map[string]string{"error": *j.StatusReason, "awsbatch_id": *j.JobId},
 								),
 							)

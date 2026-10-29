@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/shlex"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	tes "github.com/ohsu-comp-bio/funnel/tes"
 )
@@ -71,17 +72,17 @@ func (docker DockerCommand) Run(ctx context.Context) error {
 	// Sync docker API version info.
 	err := docker.SyncAPIVersion()
 	if err != nil {
-		docker.Event.Error("failed to sync docker client API version", err)
+		docker.Event.Error(errcodes.Message("FUNNEL-RUN-006"), err)
 	}
 
 	err = docker.executeCommand(ctx, docker.PullCommand, false)
 	if err != nil {
-		docker.Event.Error("failed to pull docker image using command", err, docker.PullCommand)
+		docker.Event.Error(errcodes.Message("FUNNEL-RUN-007"), err, docker.PullCommand)
 	}
 
 	err = docker.executeCommand(ctx, docker.RunCommand, true)
 	if err != nil {
-		docker.Event.Error("failed to run docker container", err)
+		docker.Event.Error(errcodes.Message("FUNNEL-RUN-008"), err)
 	}
 
 	return err
@@ -92,7 +93,7 @@ func (docker DockerCommand) Stop() error {
 	docker.Event.Info("Stopping container", "container", docker.Name)
 	err := docker.executeCommand(context.Background(), docker.StopCommand, false)
 	if err != nil {
-		docker.Event.Error("failed to stop docker container", err)
+		docker.Event.Error(errcodes.Message("FUNNEL-RUN-009"), err)
 		return err
 	}
 	return nil

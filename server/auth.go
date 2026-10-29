@@ -188,7 +188,7 @@ func (a *Authentication) logRejected(method string, err error) {
 // flow based on the configuration (OIDC, Basic, none).
 func (a *Authentication) LoginHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
-		http.Error(w, "Only GET method is supported.", http.StatusMethodNotAllowed)
+		http.Error(w, errcodes.Message("FUNNEL-AUTH-009"), http.StatusMethodNotAllowed)
 	}
 
 	if a.oidc != nil {
@@ -205,7 +205,7 @@ func (a *Authentication) LoginHandler(w http.ResponseWriter, req *http.Request) 
 // response.
 func (a *Authentication) EchoTokenHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
-		http.Error(w, "Only GET method is supported.", http.StatusMethodNotAllowed)
+		http.Error(w, errcodes.Message("FUNNEL-AUTH-009"), http.StatusMethodNotAllowed)
 	}
 
 	if a.oidc != nil {
@@ -223,9 +223,7 @@ func (a *Authentication) handleBasicAuth(w http.ResponseWriter, req *http.Reques
 		http.Redirect(w, req, "/", http.StatusSeeOther)
 	} else {
 		w.Header().Set("WWW-Authenticate", "Basic realm=Funnel")
-		msg := "User authentication is required (Basic authentication with " +
-			"username and password)"
-		http.Error(w, msg, http.StatusUnauthorized)
+		http.Error(w, errcodes.Message("FUNNEL-AUTH-010"), http.StatusUnauthorized)
 	}
 }
 

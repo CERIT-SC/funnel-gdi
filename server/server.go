@@ -22,6 +22,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/ohsu-comp-bio/funnel/compute/scheduler"
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -75,12 +76,9 @@ func newDebugInterceptor(log *logger.Logger) grpc.UnaryServerInterceptor {
 func customErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
 	const fallback = `{"error": "failed to process the request"}`
 
-	st, ok := status.FromError(err)
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fallback))
-		return
-	}
+	// Gateway errors (unknown route, malformed JSON, ...) do not pass the
+	// gRPC interceptors, so they get their error code here.
+	st, _ := status.FromError(errcodes.Ensure(err))
 
 	switch st.Code() {
 	case codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange: // 400
@@ -109,6 +107,13 @@ func customErrorHandler(ctx context.Context, mux *runtime.ServeMux, marshaler ru
 		return
 	}
 	w.Write(jErrBytes)
+}
+
+// errorCodeInterceptor gives the errors of the API an error code
+// ("FUNNEL-<AREA>-<NNN>: ..."); errors without one get a generic code.
+func errorCodeInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	resp, err := handler(ctx, req)
+	return resp, errcodes.Ensure(err)
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +162,9 @@ func (s *Server) Serve(pctx context.Context) error {
 		}),
 		grpc.UnaryInterceptor(
 			grpc_middleware.ChainUnaryServer(
+				// Error codes for all errors returned to clients, including
+				// the ones of the interceptors below.
+				errorCodeInterceptor,
 				// Recover from panics in any of the interceptors/handlers below,
 				// converting them into a gRPC Internal error instead of crashing
 				// the whole server process.

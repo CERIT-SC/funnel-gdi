@@ -23,6 +23,7 @@ import (
 	"github.com/ohsu-comp-bio/funnel/database/elastic"
 	"github.com/ohsu-comp-bio/funnel/database/mongodb"
 	"github.com/ohsu-comp-bio/funnel/database/postgres"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/metrics"
@@ -56,6 +57,11 @@ type Database interface {
 // NewServer returns a new Funnel server + scheduler based on the given config.
 func NewServer(ctx context.Context, conf *config.Config, log *logger.Logger) (*Server, error) {
 	log.Debug("NewServer", "config", conf.Safe())
+
+	em := conf.GetErrorMessages()
+	if err := errcodes.Configure(em.GetLanguage(), em.GetDir()); err != nil {
+		return nil, err
+	}
 
 	var database Database
 	var reader tes.ReadOnlyServer

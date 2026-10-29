@@ -285,12 +285,33 @@ func TestOidcLoginFlow(t *testing.T) {
 	if strings.Contains(w.Body.String(), "issued-token") {
 		t.Error("token echoed without cookie")
 	}
+	if w.Code != http.StatusNotFound || !strings.HasPrefix(w.Body.String(), "FUNNEL-AUTH-011: ") {
+		t.Errorf("without cookie: got %d %q", w.Code, w.Body.String())
+	}
 
 	// Only GET is supported.
 	w = httptest.NewRecorder()
 	c.HandleAuthCode(w, httptest.NewRequest(http.MethodPost, "/login", nil))
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("POST: got %d", w.Code)
+	if w.Code != http.StatusMethodNotAllowed || !strings.HasPrefix(w.Body.String(), "FUNNEL-AUTH-009: ") {
+		t.Errorf("POST: got %d %q", w.Code, w.Body.String())
+	}
+}
+
+func TestLoginBasicAuthentication(t *testing.T) {
+	header := "Basic YWxpY2U6c2VjcmV0" // alice:secret
+	auth := &Authentication{basic: map[string]string{header: "alice"}}
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	req.Header.Set("Authorization", header)
+	w := httptest.NewRecorder()
+	auth.LoginHandler(w, req)
+	if w.Code != http.StatusUnauthorized || !strings.HasPrefix(w.Body.String(), "FUNNEL-AUTH-010: ") {
+		t.Errorf("got %d %q", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	auth.EchoTokenHandler(w, httptest.NewRequest(http.MethodPost, "/login/token", nil))
+	if w.Code != http.StatusMethodNotAllowed || !strings.HasPrefix(w.Body.String(), "FUNNEL-AUTH-009: ") {
+		t.Errorf("POST: got %d %q", w.Code, w.Body.String())
 	}
 }
 

@@ -6,58 +6,103 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/tes"
 	"github.com/ohsu-comp-bio/funnel/version"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-// The HTTP gateway maps gRPC codes to the HTTP status codes of the TES API.
+// The HTTP gateway maps gRPC codes to the HTTP status codes of the TES API,
+// and gives errors without an error code a generic one.
 func TestCustomErrorHandler(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
 		code int
+		body string
 	}{
-		{status.Error(codes.InvalidArgument, "m"), http.StatusBadRequest},
-		{status.Error(codes.FailedPrecondition, "m"), http.StatusBadRequest},
-		{status.Error(codes.OutOfRange, "m"), http.StatusBadRequest},
-		{status.Error(codes.Unauthenticated, "m"), http.StatusUnauthorized},
-		{status.Error(codes.PermissionDenied, "m"), http.StatusForbidden},
-		{status.Error(codes.NotFound, "m"), http.StatusNotFound},
-		{status.Error(codes.AlreadyExists, "m"), http.StatusConflict},
-		{status.Error(codes.Aborted, "m"), http.StatusConflict},
-		{status.Error(codes.Canceled, "m"), 499},
-		{status.Error(codes.DeadlineExceeded, "m"), http.StatusGatewayTimeout},
-		{status.Error(codes.Internal, "m"), http.StatusInternalServerError},
-		{status.Error(codes.Unknown, "m"), http.StatusInternalServerError},
+		{status.Error(codes.InvalidArgument, "m"), http.StatusBadRequest, "FUNNEL-GEN-001: invalid request: m"},
+		{status.Error(codes.FailedPrecondition, "m"), http.StatusBadRequest, "FUNNEL-GEN-001: invalid request: m"},
+		{status.Error(codes.OutOfRange, "m"), http.StatusBadRequest, "FUNNEL-GEN-001: invalid request: m"},
+		{status.Error(codes.Unauthenticated, "m"), http.StatusUnauthorized, "FUNNEL-GEN-003: authentication required: m"},
+		{status.Error(codes.PermissionDenied, "m"), http.StatusForbidden, "FUNNEL-GEN-004: permission denied: m"},
+		{status.Error(codes.NotFound, "m"), http.StatusNotFound, "FUNNEL-GEN-002: not found: m"},
+		{status.Error(codes.AlreadyExists, "m"), http.StatusConflict, "FUNNEL-GEN-005: conflict: m"},
+		{status.Error(codes.Aborted, "m"), http.StatusConflict, "FUNNEL-GEN-005: conflict: m"},
+		{status.Error(codes.Canceled, "m"), 499, "FUNNEL-GEN-006: request canceled or timed out: m"},
+		{status.Error(codes.DeadlineExceeded, "m"), http.StatusGatewayTimeout, "FUNNEL-GEN-006: request canceled or timed out: m"},
+		{status.Error(codes.Internal, "m"), http.StatusInternalServerError, "FUNNEL-GEN-008: internal error: m"},
+		{status.Error(codes.Unknown, "m"), http.StatusInternalServerError, "FUNNEL-GEN-008: internal error: m"},
+		{errcodes.Status(codes.NotFound, "FUNNEL-TASK-001", "x"), http.StatusNotFound, "FUNNEL-TASK-001: task not found: taskID: x"},
+		{errors.New("plain"), http.StatusInternalServerError, "FUNNEL-GEN-008: internal error: plain"},
 	} {
-		t.Run(status.Code(tc.err).String(), func(t *testing.T) {
+		t.Run(tc.body, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			customErrorHandler(context.Background(), nil, &runtime.JSONPb{}, w, httptest.NewRequest(http.MethodGet, "/", nil), tc.err)
 			if w.Code != tc.code {
 				t.Errorf("HTTP %d, want %d", w.Code, tc.code)
 			}
 			var body JSONError
-			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Error != "m" {
-				t.Errorf("body %q", w.Body.String())
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Error != tc.body {
+				t.Errorf("body %q, want error %q", w.Body.String(), tc.body)
 			}
 		})
 	}
+}
 
-	t.Run("not a gRPC status", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		customErrorHandler(context.Background(), nil, &runtime.JSONPb{}, w, httptest.NewRequest(http.MethodGet, "/", nil), errors.New("plain"))
-		if w.Code != http.StatusInternalServerError || w.Body.String() != `{"error": "failed to process the request"}` {
-			t.Errorf("got %d %q", w.Code, w.Body.String())
-		}
-	})
+// Errors of the gateway itself (routing, request decoding) get error codes
+// and keep their HTTP status.
+func TestGatewayErrorsHaveCodes(t *testing.T) {
+	mux := runtime.NewServeMux(runtime.WithErrorHandler(customErrorHandler))
+	if err := tes.RegisterTaskServiceHandlerServer(context.Background(), mux, &TaskService{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		method, path, body string
+		code               int
+		prefix             string
+	}{
+		{http.MethodGet, "/v1/no-such-route", "", http.StatusNotFound, "FUNNEL-GEN-002: not found: "},
+		{http.MethodPost, "/v1/tasks", "{not json", http.StatusBadRequest, "FUNNEL-GEN-001: invalid request: "},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body)))
+			var body JSONError
+			if w.Code != tc.code || json.Unmarshal(w.Body.Bytes(), &body) != nil || !strings.HasPrefix(body.Error, tc.prefix) {
+				t.Errorf("got %d %q, want %d and an error starting with %q", w.Code, w.Body.String(), tc.code, tc.prefix)
+			}
+		})
+	}
+}
+
+func TestErrorCodeInterceptor(t *testing.T) {
+	call := func(err error) error {
+		_, got := errorCodeInterceptor(context.Background(), nil, &grpc.UnaryServerInfo{}, func(context.Context, interface{}) (interface{}, error) {
+			return nil, err
+		})
+		return got
+	}
+	if call(nil) != nil {
+		t.Error("a successful call must stay successful")
+	}
+	st, _ := status.FromError(call(status.Error(codes.FailedPrecondition, "backend parameters not supported")))
+	if st.Code() != codes.FailedPrecondition || st.Message() != "FUNNEL-GEN-001: invalid request: backend parameters not supported" {
+		t.Errorf("got %v %q", st.Code(), st.Message())
+	}
+	coded := errcodes.Status(codes.NotFound, "FUNNEL-TASK-001", "x")
+	if call(coded) != coded {
+		t.Error("an error with a code must not change")
+	}
 }
 
 func TestHealthHandler(t *testing.T) {

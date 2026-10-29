@@ -127,7 +127,7 @@ func (c *OidcConfig) RedirectToLogin(w http.ResponseWriter, req *http.Request) {
 
 func (c *OidcConfig) HandleAuthCode(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
-		http.Error(w, "Only GET method is supported.", http.StatusMethodNotAllowed)
+		http.Error(w, errcodes.Message("FUNNEL-AUTH-009"), http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -184,8 +184,7 @@ func (c *OidcConfig) HandleAuthCode(w http.ResponseWriter, req *http.Request) {
 func (c *OidcConfig) EchoTokenHandler(w http.ResponseWriter, req *http.Request) {
 	cookie, err := req.Cookie("jwt")
 	if err != nil || len(cookie.Value) == 0 {
-		msg := "Missing 'jwt' cookie. Please log in first."
-		http.Error(w, msg, http.StatusNotFound)
+		http.Error(w, errcodes.Message("FUNNEL-AUTH-011"), http.StatusNotFound)
 		return
 	}
 

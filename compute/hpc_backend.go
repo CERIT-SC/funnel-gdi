@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -78,7 +79,7 @@ func (b *HPCBackend) Submit(ctx context.Context, task *tes.Task) error {
 			ctx,
 			events.NewSystemLog(
 				task.Id, 0, 0, "error",
-				"error submitting task to "+b.Name,
+				errcodes.Message("FUNNEL-RUN-015", b.Name),
 				map[string]string{"error": err.Error(), "stderr": stderr.String(), "stdout": stdout.String()},
 			),
 		)
@@ -192,7 +193,7 @@ ReconcileLoop:
 								ctx,
 								events.NewSystemLog(
 									task.Id, 0, 0, "error",
-									b.Name+" reports system error for task",
+									errcodes.Message("FUNNEL-RUN-016", b.Name),
 									map[string]string{
 										"error":           t.Reason,
 										b.Name + "_id":    t.ID,
