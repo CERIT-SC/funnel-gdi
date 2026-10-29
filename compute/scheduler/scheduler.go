@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -117,7 +118,7 @@ func (s *Scheduler) Schedule(ctx context.Context) error {
 					"nodeID", offer.Node.Id,
 				)
 				s.Event.WriteEvent(ctx, events.NewSystemLog(task.Id, 0, 0, "error",
-					"Error in AssignTask", map[string]string{
+					errcodes.Message("FUNNEL-RUN-014"), map[string]string{
 						"error":  err.Error(),
 						"nodeID": offer.Node.Id,
 					}))

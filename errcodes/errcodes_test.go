@@ -69,7 +69,7 @@ func TestParseCatalogRejectsInvalid(t *testing.T) {
 }
 
 func TestEmbeddedCatalog(t *testing.T) {
-	cat, err := parseCatalog(messagesEN)
+	cat, err := parseCatalog(mustReadFile("messages.en.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,13 +91,13 @@ func TestReferencePageListsEveryCode(t *testing.T) {
 	for _, code := range codePattern.FindAllString(string(page), -1) {
 		documented[code] = true
 	}
-	for code := range defaultCatalog {
+	for code := range english {
 		if !documented[code] {
 			t.Errorf("%s is in messages.en.yaml but not in website/content/docs/error-codes.md", code)
 		}
 	}
 	for code := range documented {
-		if _, ok := defaultCatalog[code]; !ok {
+		if _, ok := english[code]; !ok {
 			t.Errorf("%s is in website/content/docs/error-codes.md but not in messages.en.yaml", code)
 		}
 	}
@@ -122,7 +122,7 @@ func TestCodesUsedInCodeExist(t *testing.T) {
 			return err
 		}
 		for _, code := range codePattern.FindAllString(string(data), -1) {
-			if _, ok := defaultCatalog[code]; !ok {
+			if _, ok := english[code]; !ok {
 				unknown = append(unknown, path+": "+code)
 			}
 		}
@@ -134,5 +134,137 @@ func TestCodesUsedInCodeExist(t *testing.T) {
 	sort.Strings(unknown)
 	for _, u := range unknown {
 		t.Errorf("code not in messages.en.yaml: %s", u)
+	}
+}
+
+// writeCatalog writes messages.<language>.yaml into a temporary directory.
+func writeCatalog(t *testing.T, language, data string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "messages."+language+".yaml"), []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := Configure("", ""); err != nil {
+			t.Error(err)
+		}
+	})
+	return dir
+}
+
+func TestConfigureTranslation(t *testing.T) {
+	dir := writeCatalog(t, "cs", "FUNNEL-TASK-001: \"úloha nenalezena: taskID: %s\"\n")
+	if err := Configure("cs", dir); err != nil {
+		t.Fatal(err)
+	}
+	if got := Message("FUNNEL-TASK-001", "abc"); got != "FUNNEL-TASK-001: úloha nenalezena: taskID: abc" {
+		t.Errorf("translated message %q", got)
+	}
+	// Codes the translation leaves out keep the English message.
+	if got := Message("FUNNEL-AUTH-003"); got != "FUNNEL-AUTH-003: "+english["FUNNEL-AUTH-003"] {
+		t.Errorf("fallback message %q", got)
+	}
+	st, _ := status.FromError(Status(codes.NotFound, "FUNNEL-TASK-001", "x"))
+	if st.Code() != codes.NotFound || st.Message() != "FUNNEL-TASK-001: úloha nenalezena: taskID: x" {
+		t.Errorf("status %v %q", st.Code(), st.Message())
+	}
+
+	// Back to English.
+	if err := Configure("en", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := Message("FUNNEL-TASK-001", "abc"); got != "FUNNEL-TASK-001: task not found: taskID: abc" {
+		t.Errorf("English message %q", got)
+	}
+}
+
+func TestConfigureEnglishFromDir(t *testing.T) {
+	dir := writeCatalog(t, "en", "FUNNEL-AUTH-003: \"Wrong user name or password\"\n")
+	if err := Configure("", dir); err != nil {
+		t.Fatal(err)
+	}
+	if got := Message("FUNNEL-AUTH-003"); got != "FUNNEL-AUTH-003: Wrong user name or password" {
+		t.Errorf("message %q", got)
+	}
+}
+
+func TestConfigureRejects(t *testing.T) {
+	for name, tc := range map[string]struct{ language, data string }{
+		"unknown code":         {"cs", "FUNNEL-NOPE-001: \"x\"\n"},
+		"missing verb":         {"cs", "FUNNEL-TASK-001: \"úloha nenalezena\"\n"},
+		"other verb":           {"cs", "FUNNEL-TASK-001: \"úloha nenalezena: %d\"\n"},
+		"extra verb":           {"cs", "FUNNEL-AUTH-003: \"chyba %s\"\n"},
+		"invalid catalog":      {"cs", "FUNNEL-TASK-001: [a]\n"},
+		"no file for language": {"de", ""},
+		"path in language":     {"../cs", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.data != "" {
+				dir = writeCatalog(t, tc.language, tc.data)
+			}
+			if err := Configure(tc.language, dir); err == nil {
+				t.Fatal("expected an error")
+			}
+			// The active catalog is unchanged.
+			if got := Message("FUNNEL-TASK-001", "a"); got != "FUNNEL-TASK-001: task not found: taskID: a" {
+				t.Errorf("message after a failed Configure: %q", got)
+			}
+		})
+	}
+	// Only English is built in.
+	if err := Configure("cs", ""); err == nil {
+		t.Error("expected an error for a language that is not built in")
+	}
+}
+
+func TestVerbs(t *testing.T) {
+	got := verbs("%s and %-5d, 100%% %[1]q %v")
+	want := []string{"%s", "%-5d", "%[1]q", "%v"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("verbs %q, want %q", got, want)
+	}
+}
+
+func TestEnsure(t *testing.T) {
+	if Ensure(nil) != nil {
+		t.Error("nil error")
+	}
+	coded := Status(codes.NotFound, "FUNNEL-TASK-001", "x")
+	if Ensure(coded) != coded {
+		t.Error("an error with a code must be returned as it is")
+	}
+	for c, code := range map[codes.Code]string{
+		codes.InvalidArgument:    "FUNNEL-GEN-001",
+		codes.FailedPrecondition: "FUNNEL-GEN-001",
+		codes.OutOfRange:         "FUNNEL-GEN-001",
+		codes.NotFound:           "FUNNEL-GEN-002",
+		codes.Unauthenticated:    "FUNNEL-GEN-003",
+		codes.PermissionDenied:   "FUNNEL-GEN-004",
+		codes.AlreadyExists:      "FUNNEL-GEN-005",
+		codes.Aborted:            "FUNNEL-GEN-005",
+		codes.Canceled:           "FUNNEL-GEN-006",
+		codes.DeadlineExceeded:   "FUNNEL-GEN-006",
+		codes.Unimplemented:      "FUNNEL-GEN-007",
+		codes.Internal:           "FUNNEL-GEN-008",
+		codes.Unknown:            "FUNNEL-GEN-008",
+		codes.Unavailable:        "FUNNEL-GEN-008",
+	} {
+		st, _ := status.FromError(Ensure(status.Error(c, "Not Found")))
+		if st.Code() != c {
+			t.Errorf("%v: gRPC code changed to %v", c, st.Code())
+		}
+		if want := Message(code, "Not Found"); st.Message() != want {
+			t.Errorf("%v: message %q, want %q", c, st.Message(), want)
+		}
+	}
+	st, _ := status.FromError(Ensure(os.ErrNotExist))
+	if st.Code() != codes.Internal || st.Message() != "FUNNEL-GEN-008: internal error: file does not exist" {
+		t.Errorf("plain error: %v %q", st.Code(), st.Message())
+	}
+	// A message that only mentions a code later on is not taken as coded.
+	st, _ = status.FromError(Ensure(status.Error(codes.InvalidArgument, "bad FUNNEL-TASK-001: x")))
+	if !strings.HasPrefix(st.Message(), "FUNNEL-GEN-001: ") {
+		t.Errorf("message %q", st.Message())
 	}
 }

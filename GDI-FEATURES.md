@@ -28,14 +28,14 @@ GDI-only (not meant for upstream):
 - Docs: `website/content/docs/storage/{htsget,sda}.md`, PVC modes section in `website/content/docs/compute/kubernetes.md`.
 - Documentation website (https://cerit-sc.github.io/funnel-gdi/, one copy per release + `latest/` + `dev/`): `.github/workflows/pages.yaml`, `website/scripts/` (`sync-gdi-docs.py` generates the "GDI fork" pages from the root documents, `build-versions.sh`, `check-links.py`), `website/content/gdi.md`, `website/content/download.md`, `website/layouts/partials/{version-bar,page-banner}.html`, `website/layouts/shortcodes/gdi-version.html`, `website/go.mod` (pinned Hugo modules), GDI header/home page in `website/layouts/`, `website/config.yaml` (`baseURL`, menu, `params`), `gdi` / `gdi_support` front matter on upstream pages.
 - Postgres schema migrations: `database/postgres/migrations/*.sql` (human-readable, applied in order and recorded in `schema_version`), `database/postgres/migrate.go`; tests in `database/postgres/migrate_test.go`.
-- Error codes: package `errcodes` (`errcodes.Status` / `errcodes.Message`, messages in `errcodes/messages.en.yaml`), reference page `website/content/docs/error-codes.md`; tests in `errcodes/errcodes_test.go` (catalog validation, page in sync with the catalog, every code used in the code is defined).
+- Error codes: package `errcodes` (`errcodes.Status` / `errcodes.Message`, messages in `errcodes/messages.en.yaml`), reference page `website/content/docs/error-codes.md`; tests in `errcodes/errcodes_test.go` (catalog validation, page in sync with the catalog, every code used in the code is defined). API errors without a code get a generic `FUNNEL-GEN` code by their gRPC code (`errcodes.Ensure`, called by `errorCodeInterceptor` and `customErrorHandler` in `server/server.go`); error and warning system logs of tasks use `FUNNEL-RUN` codes. The language is selected with the config `ErrorMessages` (`Language`, `Dir` with `messages.<Language>.yaml`), read by `errcodes.Configure` in `cmd/server` and `cmd/worker`.
 - End-user support: "Troubleshooting for users" and "Getting help" in `DEPLOYMENT.md` (linked from `website/content/gdi.md` and `website/content/docs/tasks.md`), issue templates `.github/ISSUE_TEMPLATE/{bug_report,question,config}.yml`.
 - Release and documentation process: `RELEASING.md` (release policy and checklist), `scripts/check-docs-version.sh` (run by `git-tag.yaml` for `X.Y.Z.N` tags, which also creates the GitHub Release), `.github/workflows/docs.yaml` (website build + link check on PRs to `master`). `CHANGELOG.md` stays the upstream changelog.
 
 ## Keeping in sync with upstream
 
 - Config is Protobuf (`config/config.proto`), parsed strictly. GDI fields use
-  numbers `HTSGETStorage = 34`, `SDAStorage = 35` (in `Config`) and
+  numbers `HTSGETStorage = 34`, `SDAStorage = 35`, `ErrorMessages = 36` (in `Config`) and
   `PVCMode = 21` … `WorkerImage = 24` (in `Kubernetes`). Check for collisions
   on every upstream merge.
 - Regenerate after proto/template changes:

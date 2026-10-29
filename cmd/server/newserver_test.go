@@ -46,6 +46,7 @@ func TestNewServer(t *testing.T) {
 		{"kubernetes without template", func(c *config.Config) { c.Compute = "kubernetes"; c.Kubernetes.WorkerTemplate = "" }, "job template"},
 		{"plugin without path", func(c *config.Config) { c.Plugins = &config.Plugins{} }, "'Path' is not found"},
 		{"plugin that does not exist", func(c *config.Config) { c.Plugins = &config.Plugins{Path: "/no/such/plugin"} }, "plugin"},
+		{"unknown error message language", func(c *config.Config) { c.ErrorMessages = &config.ErrorMessages{Language: "xx"} }, "error messages"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			conf := testConfig(t)

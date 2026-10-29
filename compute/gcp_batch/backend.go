@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/logging"
 	logadmin "cloud.google.com/go/logging/apiv2"
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/storage"
@@ -342,7 +343,7 @@ func (b *Backend) Submit(task *tes.Task) error {
 			ctx,
 			events.NewSystemLog(
 				task.Id, 0, 0, "error",
-				"error submitting task to GCP Batch",
+				errcodes.Message("FUNNEL-RUN-015", "GCP Batch"),
 				map[string]string{"error": err.Error()},
 			),
 		)
@@ -483,7 +484,9 @@ ReconcileLoop:
 									}
 								}
 								if failureReason == "" {
-									failureReason = "GCP Batch job in FAILED state"
+									failureReason = errcodes.Message("FUNNEL-RUN-017", "GCP Batch")
+								} else {
+									failureReason = errcodes.Message("FUNNEL-RUN-022", failureReason)
 								}
 
 								b.event.WriteEvent(

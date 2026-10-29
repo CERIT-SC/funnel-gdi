@@ -98,3 +98,12 @@ func TestTaskFileOption(t *testing.T) {
 	c.SetArgs([]string{"run", "-b", "abcd"})
 	c.Execute()
 }
+
+func TestNewWorkerErrorMessages(t *testing.T) {
+	conf := config.DefaultConfig()
+	conf.ErrorMessages = &config.ErrorMessages{Language: "xx", Dir: t.TempDir()}
+	_, err := NewWorker(context.Background(), conf, logger.NewLogger("test", logger.DefaultConfig()), &Options{TaskBase64: "e30="})
+	if err == nil || !strings.Contains(err.Error(), "error messages") {
+		t.Fatalf("got %v, want an error about the error messages", err)
+	}
+}

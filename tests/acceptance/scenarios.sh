@@ -8,6 +8,7 @@
 #     commands that run the job script locally
 #  4. basic authentication and task access (OwnerOrAdmin)
 #  5. a standalone worker (task file, base64 task, scratch directory)
+#  6. error codes and the language of the error messages (ErrorMessages)
 # Every Funnel process writes its coverage to GOCOVERDIR. Optional: S3 storage
 # (make start-s3) and FTP storage (make start-ftp) when their containers run.
 #
@@ -332,9 +333,19 @@ want "cancel another user's task" 403 -u bob:bob-pw -X POST "$A/v1/tasks/$aid:ca
 want "admin gets any task" 200 -u admin:admin-pw "$A/v1/tasks/$aid"
 want "list as bob" 200 -u bob:bob-pw "$A/v1/tasks"
 jq -e '(.tasks // []) | length == 0' "$work/out" > /dev/null || { echo "FAIL bob sees alice's task"; exit 1; }
+# coded <description> <message prefix>: the error in the last response.
+coded() {
+  local got; got=$(jq -r .error "$work/out")
+  case "$got" in "$2"*) echo "ok   $1";; *) echo "FAIL $1: error \"$got\", want \"$2…\""; exit 1;; esac
+}
 want "unknown task" 404 -u alice:alice-pw "$A/v1/tasks/no-such-task"
+coded "unknown task has a code" "FUNNEL-TASK-001: "
 want "invalid task" 400 -u alice:alice-pw -H 'Content-Type: application/json' -d '{"executors": []}' $A/v1/tasks
+coded "invalid task has a code" "FUNNEL-TASK-006: "
 want "malformed JSON" 400 -u alice:alice-pw -H 'Content-Type: application/json' -d '{' $A/v1/tasks
+coded "malformed JSON has a code" "FUNNEL-GEN-001: "
+want "unknown route" 404 -u alice:alice-pw $A/v1/no-such-route
+coded "unknown route has a code" "FUNNEL-GEN-002: "
 want "health" 200 $A/healthz
 want "metrics" 200 $A/metrics
 want "dashboard" 200 -H "Accept: text/html" $A/
@@ -372,5 +383,28 @@ expect "worker with a base64 task" "$funnel" worker run --config standalone/work
 cmp in.txt standalone/result/out.txt
 expect_fail "worker with an unknown image" "$funnel" worker run --config standalone/worker.yml \
   --taskBase64 "$(echo '{"id": "standalone-2", "executors": [{"image": "funnel-scenarios/no-such-image:0", "command": ["true"]}]}' | base64 | tr -d '\n')"
+
+echo "== 6. Error codes and the language of the error messages"
+# A failed download is logged in the task with its code.
+want "task with a missing input" 200 -u alice:alice-pw -H 'Content-Type: application/json' \
+  -d "{\"executors\": [{\"image\": \"alpine\", \"command\": [\"true\"]}], \"inputs\": [{\"url\": \"$work/missing.txt\", \"path\": \"/data/in.txt\"}]}" $A/v1/tasks
+mid=$(jq -r .id "$work/out")
+FUNNEL_SERVER_USER=alice FUNNEL_SERVER_PASSWORD=alice-pw expect_fail "task with a missing input fails" "$funnel" task wait -S $A "$mid"
+want "system logs of the failed task" 200 -u alice:alice-pw "$A/v1/tasks/$mid?view=FULL"
+jq -e '[.logs[].system_logs[]?] | any(contains("FUNNEL-RUN-012: download failed"))' "$work/out" > /dev/null \
+  && echo "ok   failed download has a code" || { echo "FAIL failed download has no code"; cat "$work/out"; exit 1; }
+
+# A server with a (partial) Czech translation: translated codes in Czech,
+# the others in English.
+mkdir -p messages
+cat > messages/messages.cs.yaml <<'EOF'
+FUNNEL-TASK-001: "úloha nenalezena: taskID: %s"
+EOF
+server lang 18087 19097 "Compute: local" "ErrorMessages:" "  Language: cs" "  Dir: $work/messages"
+L=http://localhost:18087
+want "unknown task (cs)" 404 "$L/v1/tasks/no-such-task"
+coded "translated message" "FUNNEL-TASK-001: úloha nenalezena: taskID: no-such-task"
+want "malformed JSON (cs)" 400 -H 'Content-Type: application/json' -d '{' $L/v1/tasks
+coded "untranslated message stays English" "FUNNEL-GEN-001: invalid request: "
 
 echo "== done"

@@ -299,7 +299,7 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 		ts.Log.Error("compute backend failed to clean up resources during cancel", "taskID", req.Id, "error", err)
 		if logErr := ts.Event.WriteEvent(ctx, events.NewSystemLog(
 			req.Id, 0, 0, "error",
-			"Error cleaning up compute resources during cancel",
+			errcodes.Message("FUNNEL-RUN-018"),
 			map[string]string{"error": err.Error()},
 		)); logErr != nil {
 			ts.Log.Error("failed to write system log for cancel cleanup error", "taskID", req.Id, "error", logErr)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/storage"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -34,7 +35,7 @@ func FlattenInputs(ctx context.Context, inputs []*tes.Input, store storage.Stora
 			}
 
 			if len(list) == 0 {
-				ev.Warn("download source directory is empty", "url", input.Url)
+				ev.Warn(errcodes.Message("FUNNEL-RUN-010"), "url", input.Url)
 				continue
 			}
 
@@ -99,7 +100,7 @@ func FlattenOutputs(ctx context.Context, outputs []*tes.Output, store storage.St
 			}
 
 			if len(list) == 0 {
-				ev.Warn("upload source directory is empty", "url", output.Url)
+				ev.Warn(errcodes.Message("FUNNEL-RUN-011"), "url", output.Url)
 				continue
 			}
 
@@ -169,7 +170,7 @@ func (d *download) Finished(obj *storage.Object) {
 	d.ev.Info("download finished", "url", d.in.Url, "size", obj.Size, "etag", obj.ETag)
 }
 func (d *download) Failed(err error) {
-	d.ev.Error("download failed", "url", d.in.Url, "error", err)
+	d.ev.Error(errcodes.Message("FUNNEL-RUN-012"), "url", d.in.Url, "error", err)
 	d.cancel()
 	d.err = err
 }
@@ -200,7 +201,7 @@ func (u *upload) Finished(obj *storage.Object) {
 }
 func (u *upload) Failed(err error) {
 	u.err = err
-	u.ev.Error("upload failed", "url", u.out.Url, "error", err)
+	u.ev.Error(errcodes.Message("FUNNEL-RUN-013"), "url", u.out.Url, "error", err)
 }
 
 // fixLinks walks the output paths, fixing cases where a symlink is

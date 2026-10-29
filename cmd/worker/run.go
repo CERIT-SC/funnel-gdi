@@ -11,6 +11,7 @@ import (
 	"github.com/ohsu-comp-bio/funnel/database/elastic"
 	"github.com/ohsu-comp-bio/funnel/database/mongodb"
 	"github.com/ohsu-comp-bio/funnel/database/postgres"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/storage"
@@ -35,6 +36,11 @@ func NewWorker(ctx context.Context, conf *config.Config, log *logger.Logger, opt
 	err := validateConfig(conf, opts)
 	if err != nil {
 		return nil, fmt.Errorf("validating config: %v", err)
+	}
+
+	em := conf.GetErrorMessages()
+	if err := errcodes.Configure(em.GetLanguage(), em.GetDir()); err != nil {
+		return nil, err
 	}
 
 	// Construct a set of event writers based on the config.

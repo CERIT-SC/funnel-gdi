@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/ohsu-comp-bio/funnel/compute/kubernetes/resources"
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/plugins/proto"
@@ -148,7 +149,7 @@ func (b *Backend) Submit(ctx context.Context, task *tes.Task, config *config.Con
 			context.Background(),
 			events.NewSystemLog(
 				task.Id, 0, 0, "error",
-				"Kubernetes job in FAILED state",
+				errcodes.Message("FUNNEL-RUN-017", "Kubernetes"),
 				map[string]string{"error": err.Error()},
 			),
 		)
@@ -652,7 +653,7 @@ func (b *Backend) cleanResourcesIfEnabled(ctx context.Context, jobName string, d
 
 func (b *Backend) writeSystemError(ctx context.Context, jobName string, errAttributes map[string]string, additionalMessage string) {
 	if additionalMessage == "" {
-		additionalMessage = "Kubernetes job in FAILED state"
+		additionalMessage = errcodes.Message("FUNNEL-RUN-017", "Kubernetes")
 	}
 
 	b.event.WriteEvent(ctx, events.NewState(jobName, tes.SystemError))
@@ -687,7 +688,7 @@ func (b *Backend) reconcileJob(ctx context.Context, j *v1.Job, disableCleanup bo
 			if podEvents := FetchPodWarningEvents(ctx, b.client, b.conf.Kubernetes.JobsNamespace, pods); podEvents != "" {
 				errDetail = fmt.Sprintf("%s\n%s", reason, podEvents)
 			}
-			b.writeSystemError(ctx, jobName, map[string]string{"error": errDetail}, "Kubernetes worker pod has a terminal container waiting error")
+			b.writeSystemError(ctx, jobName, map[string]string{"error": errDetail}, errcodes.Message("FUNNEL-RUN-019"))
 			b.cleanResourcesIfEnabled(ctx, jobName, disableCleanup)
 			return
 		}
@@ -699,7 +700,7 @@ func (b *Backend) reconcileJob(ctx context.Context, j *v1.Job, disableCleanup bo
 		b.log.Debug("checking for FailedCreate events on job", "taskID", jobName)
 		if count, reason := b.hasJobFailedCreateEvent(ctx, jobName); count > 0 {
 			b.log.Debug("reconcile: worker job has FailedCreate event", "taskID", jobName, "count", count, "reason", reason)
-			b.writeSystemError(ctx, jobName, map[string]string{"error": reason}, "worker job failed to create pod")
+			b.writeSystemError(ctx, jobName, map[string]string{"error": reason}, errcodes.Message("FUNNEL-RUN-020"))
 			b.cleanResourcesIfEnabled(ctx, jobName, disableCleanup)
 			return
 		}
@@ -751,7 +752,7 @@ func (b *Backend) reconcileJob(ctx context.Context, j *v1.Job, disableCleanup bo
 		// available in this state.
 		if count, reason := b.hasJobFailedCreateEvent(ctx, jobName); count > 0 {
 			b.log.Debug("reconcile: worker job has FailedCreate event (zero-status)", "taskID", jobName, "count", count, "reason", reason)
-			b.writeSystemError(ctx, jobName, map[string]string{"error": reason}, "Kubernetes worker job failed to create pod")
+			b.writeSystemError(ctx, jobName, map[string]string{"error": reason}, errcodes.Message("FUNNEL-RUN-020"))
 			b.cleanResourcesIfEnabled(ctx, jobName, disableCleanup)
 		}
 	}
@@ -788,7 +789,7 @@ func (b *Backend) reconcileOnce(ctx context.Context, disableCleanup bool) {
 					b.reconcileJob(ctx, j, disableCleanup)
 				} else {
 					b.log.Debug("reconcile: job not found for task", "taskID", task.Id)
-					b.writeSystemError(ctx, task.Id, map[string]string{"error": "job not found"}, "Kubernetes job not found for task")
+					b.writeSystemError(ctx, task.Id, map[string]string{"error": "job not found"}, errcodes.Message("FUNNEL-RUN-021"))
 				}
 			}
 			pageToken = lresp.NextPageToken

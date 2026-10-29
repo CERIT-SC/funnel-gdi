@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/storage"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -87,7 +88,7 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 	//      but, it's also difficult to report the failure usefully.
 	if run.syserr != nil {
 		r.EventWriter.WriteEvent(pctx, events.NewSystemLog("unknown", 0, 0, "error",
-			"failed to get task. ID unknown", map[string]string{
+			errcodes.Message("FUNNEL-RUN-005"), map[string]string{
 				"error": run.syserr.Error(),
 			}))
 		runerr = run.syserr
@@ -129,12 +130,12 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 			runerr = fmt.Errorf("task canceled")
 		case run.syserr != nil:
 			// Something else failed
-			event.Error("System error", "error", run.syserr)
+			event.Error(errcodes.Message("FUNNEL-RUN-001"), "error", run.syserr)
 			event.State(tes.State_SYSTEM_ERROR)
 			runerr = run.syserr
 		case run.execerr != nil:
 			// One of the executors failed
-			event.Error("Exec error", "error", run.execerr)
+			event.Error(errcodes.Message("FUNNEL-RUN-002"), "error", run.execerr)
 			event.State(tes.State_EXECUTOR_ERROR)
 			runerr = run.execerr
 		default:
@@ -361,7 +362,7 @@ func (r *DefaultWorker) Run(pctx context.Context) (runerr error) {
 			if run.execerr != nil {
 				// The executor already failed; treat upload errors as warnings so the
 				// task is reported as EXECUTOR_ERROR rather than SYSTEM_ERROR.
-				event.Error("Failed to upload outputs after executor error", "error", uploadErr)
+				event.Error(errcodes.Message("FUNNEL-RUN-003"), "error", uploadErr)
 			} else {
 				run.syserr = uploadErr
 			}
@@ -399,7 +400,7 @@ func (r *DefaultWorker) openStepLogs(mapper *FileMapper, s *stepWorker, d *tes.E
 		stdin, err = mapper.OpenHostFile(d.Stdin)
 		s.Command.SetStdin(stdin)
 		if err != nil {
-			s.Event.Error("Couldn't prepare log files", err)
+			s.Event.Error(errcodes.Message("FUNNEL-RUN-004"), err)
 			return err
 		}
 	}
@@ -409,7 +410,7 @@ func (r *DefaultWorker) openStepLogs(mapper *FileMapper, s *stepWorker, d *tes.E
 		stdout, err = mapper.CreateHostFile(d.Stdout)
 		s.Command.SetStdout(stdout)
 		if err != nil {
-			s.Event.Error("Couldn't prepare log files", err)
+			s.Event.Error(errcodes.Message("FUNNEL-RUN-004"), err)
 			return err
 		}
 	}
@@ -419,7 +420,7 @@ func (r *DefaultWorker) openStepLogs(mapper *FileMapper, s *stepWorker, d *tes.E
 		stderr, err = mapper.CreateHostFile(d.Stderr)
 		s.Command.SetStderr(stderr)
 		if err != nil {
-			_ = s.Event.Error("Couldn't prepare log files", err)
+			_ = s.Event.Error(errcodes.Message("FUNNEL-RUN-004"), err)
 			return err
 		}
 	}

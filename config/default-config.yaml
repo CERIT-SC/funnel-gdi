@@ -19,6 +19,15 @@ Logger:
   # Write logs to this path. If empty, logs are written to stderr.
   OutputFile: ""
 
+# Language of the error messages the API returns and tasks log (codes
+# FUNNEL-<AREA>-<NNN>, see the error codes reference).
+ErrorMessages:
+  # "en" (or empty) is English, the only language built in. Another language
+  # reads messages.<Language>.yaml from Dir; codes it leaves out stay English.
+  Language: en
+  # Directory with messages.<Language>.yaml. Empty: the built-in catalogs.
+  Dir: ""
+
 Server:
   # Hostname of the Funnel server.
   HostName: localhost

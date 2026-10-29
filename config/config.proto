@@ -56,6 +56,19 @@ message Config {
   // GA4GH storage (GDI): htsget:// and sda:// task inputs
   HTSGETStorage HTSGETStorage = 34;
   SDAStorage SDAStorage = 35;
+  // Language of the error messages (GDI)
+  ErrorMessages ErrorMessages = 36;
+}
+
+// ErrorMessages selects the language of the error messages that the API
+// returns and that tasks log (codes FUNNEL-<AREA>-<NNN>).
+message ErrorMessages {
+  // Language of the messages, e.g. "cs" for messages.cs.yaml. Empty or "en":
+  // English.
+  string Language = 1;
+  // Directory with messages.<Language>.yaml. Empty: the catalogs built into
+  // Funnel (only English).
+  string Dir = 2;
 }
 
 // This config matches the funnel plugins repo protobuf
