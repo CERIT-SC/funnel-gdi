@@ -9,7 +9,6 @@ import (
 
 	"github.com/ohsu-comp-bio/funnel/config"
 	"github.com/ohsu-comp-bio/funnel/logger"
-	"github.com/ohsu-comp-bio/funnel/util"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -36,7 +35,7 @@ func newTestNode(conf *config.Config, t *testing.T) testNode {
 		resources: res,
 		workerRun: NoopWorker,
 		workers:   newRunSet(),
-		timeout:   util.NewIdleTimeout(conf.Node.Timeout.GetDuration().AsDuration()),
+		timeout:   idleTimeout(conf.Node),
 		state:     NodeState_ALIVE,
 	}
 

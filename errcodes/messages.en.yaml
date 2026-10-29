@@ -1,0 +1,55 @@
+# Funnel error codes and their messages (English).
+#
+# Every error the API returns to a client starts with one of these codes:
+# "FUNNEL-<AREA>-<NNN>: <message>". The messages are fmt format strings; the
+# code passes the arguments (%s, %d, %q, ...).
+#
+# Rules:
+#   - Codes are permanent: never reuse or renumber one, only add new ones.
+#   - Every code is documented in website/content/docs/error-codes.md (a test
+#     checks this).
+#   - A translation is a copy of this file named messages.<language>.yaml
+#     with the same codes and translated messages.
+
+FUNNEL-GEN-000: "internal error (unknown code %s)"
+
+# Authentication and access (server/auth.go, server/auth_oidc.go)
+FUNNEL-AUTH-001: "Missing metadata in the context"
+FUNNEL-AUTH-002: "Basic/Bearer authorization token missing"
+FUNNEL-AUTH-003: "Basic-authentication failed"
+FUNNEL-AUTH-004: "Bearer authorization token not accepted"
+FUNNEL-AUTH-005: "Unexpected value in the 'state' query-parameter"
+FUNNEL-AUTH-006: "OIDC authentication flow failed [%s]: %s"
+FUNNEL-AUTH-007: "Failed to receive a JWT for the authorization code: %s"
+FUNNEL-AUTH-008: "permission denied: taskID: %s"
+
+# Task requests (server/tes.go)
+FUNNEL-TASK-001: "task not found: taskID: %s"
+FUNNEL-TASK-002: "Task input from SDA requires a Bearer token to be used for fetching the data, however, current authentication-context has no information about the token to use. If necessary, please provide an explicit Bearer token in the URL right after the hash-sign ('#'): sda://dataset-id/file/path#bearer-token"
+FUNNEL-TASK-003: "invalid resources: %v"
+FUNNEL-TASK-004: "error creating task: %v"
+FUNNEL-TASK-005: "rejected by the authorization plugin: %v"
+# One line per problem, each with its FUNNEL-VAL code
+FUNNEL-TASK-006: "invalid task message:\n%v"
+
+# Task validation (tes/validate.go); the task fields are named as in the TES API
+FUNNEL-VAL-001: 'Task.Executors: at least one executor is required'
+FUNNEL-VAL-002: 'Task.Executors[%d].Image: required, but empty'
+FUNNEL-VAL-003: 'Task.Executors[%d].Command: required, but empty'
+FUNNEL-VAL-004: 'Task.Executors[%d].Workdir: must be an absolute path'
+FUNNEL-VAL-005: 'Task.Executors[%d].Workdir: %q is not allowed as a working directory'
+FUNNEL-VAL-006: 'Task.Executors[%d].Stdin: must be an absolute path'
+FUNNEL-VAL-007: 'Task.Executors[%d].Stdout: must be an absolute path'
+FUNNEL-VAL-008: 'Task.Executors[%d].Stderr: must be an absolute path'
+FUNNEL-VAL-009: 'Task.Inputs[%d].Content: Url is non-empty'
+FUNNEL-VAL-010: 'Task.Inputs[%d].Url: required, but empty'
+FUNNEL-VAL-011: 'Task.Inputs[%d].Path: required, but empty'
+FUNNEL-VAL-012: 'Task.Inputs[%d].Path: must be an absolute path'
+FUNNEL-VAL-013: 'Task.Inputs[%d].Path: %q is not allowed as an input path'
+FUNNEL-VAL-014: 'Task.Outputs[%d].Url: required, but empty'
+FUNNEL-VAL-015: 'Task.Outputs[%d].Path: required, but empty'
+FUNNEL-VAL-016: 'Task.Outputs[%d].Path: must be an absolute path'
+FUNNEL-VAL-017: 'Task.Outputs[%d].Path: %q is not allowed as an output path'
+FUNNEL-VAL-018: 'Task.Volumes[%d]: must be an absolute path'
+FUNNEL-VAL-019: 'Task.Volumes[%d]: %q is not allowed as a volume path'
+FUNNEL-VAL-020: 'Task.Tags[""]=%s: empty key'

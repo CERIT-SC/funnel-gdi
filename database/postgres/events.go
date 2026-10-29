@@ -20,7 +20,7 @@ import (
 func (db *Postgres) WriteEvent(ctx context.Context, req *events.Event) error {
 	logger := logger.NewLogger("postgres", logger.DefaultConfig())
 
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(ctx)
 	defer cancel()
 
 	selector := req.Id
@@ -150,16 +150,20 @@ func (db *Postgres) WriteEvent(ctx context.Context, req *events.Event) error {
 
 		// Task Metadata
 		case events.Type_TASK_METADATA:
-			for k, v := range req.GetMetadata().Value {
-				path := fmt.Sprintf("{logs,%v,metadata,%s}", req.Attempt, k)
-				updateSQL := `
-                    UPDATE tasks 
-                    SET data = jsonb_set(data, $1::text[], $2::jsonb, true)
-                    WHERE id = $3
-                `
-				if _, err := db.client.Exec(ctx, updateSQL, path, fmt.Sprintf(`"%s"`, v), selector); err != nil {
-					return fmt.Errorf("failed to update task metadata '%s': %w", path, err)
-				}
+			// Merged into the attempt's metadata object, which is created if
+			// missing (an empty map is not stored at task creation).
+			path := fmt.Sprintf("{logs,%v,metadata}", req.Attempt)
+			metadata, err := json.Marshal(req.GetMetadata().Value)
+			if err != nil {
+				return fmt.Errorf("failed to marshal task metadata: %w", err)
+			}
+			updateSQL := `
+				UPDATE tasks
+				SET data = jsonb_set(data, $1::text[], COALESCE(data #> $1::text[], '{}'::jsonb) || $2::jsonb, true)
+				WHERE id = $3
+			`
+			if _, err := db.client.Exec(ctx, updateSQL, path, metadata, selector); err != nil {
+				return fmt.Errorf("failed to update task metadata '%s': %w", path, err)
 			}
 			return nil
 
@@ -208,12 +212,12 @@ func (db *Postgres) WriteEvent(ctx context.Context, req *events.Event) error {
 		logValue := req.SysLogString()
 
 		selectSQL := `
-            SELECT data #> '{logs,0,system_logs}' 
+            SELECT data #> $2::text[]
             FROM tasks
             WHERE id = $1
         `
 		var currentLogsJSON []byte
-		err := db.client.QueryRow(ctx, selectSQL, selector).Scan(&currentLogsJSON)
+		err := db.client.QueryRow(ctx, selectSQL, selector, jsonPath).Scan(&currentLogsJSON)
 		if err != nil {
 			return fmt.Errorf("failed to read current system logs for task %s: %w", selector, err)
 		}

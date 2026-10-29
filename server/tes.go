@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/events"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"github.com/ohsu-comp-bio/funnel/plugins/proto"
@@ -98,6 +99,11 @@ func (ts *TaskService) HandleDoPluginAction(ctx context.Context, task *tes.Task,
 	return pluginResponse, err
 }
 
+// taskIDForMessage shortens a task ID from a request for error messages.
+func taskIDForMessage(id string) string {
+	return truncate(id, 256)
+}
+
 // CreateTask provides an HTTP/gRPC endpoint for creating a task.
 // This is part of the TES implementation.
 func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.CreateTaskResponse, error) {
@@ -105,7 +111,7 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 		pluginResponse, err := ts.HandleDoPluginAction(ctx, task, proto.Type_CREATE)
 		if err != nil {
 			if pluginResponse != nil && pluginResponse.Code != 0 {
-				return nil, status.Errorf(server.GRPCCodeFromHTTPStatus(int(pluginResponse.Code)), "%v", err.Error())
+				return nil, errcodes.Status(server.GRPCCodeFromHTTPStatus(int(pluginResponse.Code)), "FUNNEL-TASK-005", err)
 			} else {
 				return nil, err
 			}
@@ -125,11 +131,15 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 	}
 
 	if err := tes.InitTaskWithForbiddenPathPrefixes(task, true, ts.forbiddenPathPrefixes()); err != nil {
+		var invalid tes.ValidationError
+		if errors.As(err, &invalid) {
+			return nil, errcodes.Status(codes.InvalidArgument, "FUNNEL-TASK-006", invalid)
+		}
 		return nil, status.Errorf(codes.InvalidArgument, "%v", err.Error())
 	}
 
 	if err := ReplaceInputBearerToken(ctx, task); err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, errcodes.Status(codes.InvalidArgument, "FUNNEL-TASK-002")
 	}
 
 	if err := ts.Compute.CheckBackendParameterSupport(task); err != nil {
@@ -142,12 +152,12 @@ func (ts *TaskService) CreateTask(ctx context.Context, task *tes.Task) (*tes.Cre
 	if ts.Config.Compute == "kubernetes" {
 		task.Resources, err = config.ValidateResources(task.Resources, ts.Config.Kubernetes.Resources)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid resources: %v", err)
+			return nil, errcodes.Status(codes.InvalidArgument, "FUNNEL-TASK-003", err)
 		}
 	}
 
 	if err := ts.Event.WriteEvent(ctx, events.NewTaskCreated(task)); err != nil {
-		return nil, fmt.Errorf("error creating task: %s", err)
+		return nil, errcodes.Status(codes.Internal, "FUNNEL-TASK-004", err)
 	}
 
 	pluginResponse := ctx.Value("pluginResponse")
@@ -205,7 +215,9 @@ func (ts *TaskService) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*t
 
 	task, err := ts.Read.GetTask(ctx, req)
 	if err == tes.ErrNotFound {
-		err = status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
+		err = errcodes.Status(codes.NotFound, "FUNNEL-TASK-001", taskIDForMessage(req.Id))
+	} else if err == tes.ErrNotPermitted {
+		err = errcodes.Status(codes.PermissionDenied, "FUNNEL-AUTH-008", taskIDForMessage(req.Id))
 	}
 	return task, err
 }
@@ -222,7 +234,7 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 		pluginResponse, err := ts.HandleDoPluginAction(ctx, nil, proto.Type_CANCEL)
 		if err != nil {
 			if pluginResponse != nil && pluginResponse.Code != 0 {
-				return nil, status.Errorf(server.GRPCCodeFromHTTPStatus(int(pluginResponse.Code)), "%v", err.Error())
+				return nil, errcodes.Status(server.GRPCCodeFromHTTPStatus(int(pluginResponse.Code)), "FUNNEL-TASK-005", err)
 			} else {
 				return nil, err
 			}
@@ -241,7 +253,9 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 		Id: req.Id,
 	})
 	if err == tes.ErrNotFound {
-		return result, status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
+		return result, errcodes.Status(codes.NotFound, "FUNNEL-TASK-001", taskIDForMessage(req.Id))
+	} else if err == tes.ErrNotPermitted {
+		return result, errcodes.Status(codes.PermissionDenied, "FUNNEL-AUTH-008", taskIDForMessage(req.Id))
 	} else if err != nil {
 		return result, err
 	}
@@ -263,10 +277,16 @@ func (ts *TaskService) CancelTask(ctx context.Context, req *tes.CancelTaskReques
 	// updated database and other event streams (includes access-checking)
 	err = ts.Event.WriteEvent(ctx, events.NewState(req.Id, tes.Canceled))
 	if err == tes.ErrNotFound {
-		return result, status.Errorf(codes.NotFound, "%v: taskID: %s", err.Error(), req.Id)
+		return result, errcodes.Status(codes.NotFound, "FUNNEL-TASK-001", taskIDForMessage(req.Id))
 	} else if err == tes.ErrNotPermitted {
-		return result, status.Errorf(codes.PermissionDenied, "%v: taskID: %s", err.Error(), req.Id)
+		return result, errcodes.Status(codes.PermissionDenied, "FUNNEL-AUTH-008", taskIDForMessage(req.Id))
 	} else if err != nil {
+		// The task can finish between the check above and the update; then
+		// there is nothing to cancel, as for a task that was already finished.
+		if task, gerr := ts.Read.GetTask(ctx, &tes.GetTaskRequest{Id: req.Id}); gerr == nil && tes.TerminalState(task.State) {
+			ts.Log.Info("Task finished before it was canceled", "taskId", req.Id, "state", task.State)
+			return result, nil
+		}
 		return result, err
 	}
 

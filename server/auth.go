@@ -8,12 +8,12 @@ import (
 	"strings"
 
 	"github.com/ohsu-comp-bio/funnel/config"
+	"github.com/ohsu-comp-bio/funnel/errcodes"
 	"github.com/ohsu-comp-bio/funnel/logger"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
 type Authentication struct {
@@ -53,10 +53,10 @@ type UserInfo struct {
 type userInfoContextKey string
 
 var (
-	errMissingMetadata    = status.Errorf(codes.InvalidArgument, "Missing metadata in the context")
-	errTokenRequired      = status.Errorf(codes.Unauthenticated, "Basic/Bearer authorization token missing")
-	errInvalidBasicToken  = status.Errorf(codes.Unauthenticated, "Basic-authentication failed")
-	errInvalidBearerToken = status.Errorf(codes.Unauthenticated, "Bearer authorization token not accepted")
+	errMissingMetadata    = errcodes.Status(codes.InvalidArgument, "FUNNEL-AUTH-001")
+	errTokenRequired      = errcodes.Status(codes.Unauthenticated, "FUNNEL-AUTH-002")
+	errInvalidBasicToken  = errcodes.Status(codes.Unauthenticated, "FUNNEL-AUTH-003")
+	errInvalidBearerToken = errcodes.Status(codes.Unauthenticated, "FUNNEL-AUTH-004")
 	publicUserInfo        = UserInfo{IsPublic: true, IsAdmin: false, Username: ""}
 	systemUserInfo        = UserInfo{IsPublic: false, IsAdmin: true, Username: "SYSTEM"}
 	UserInfoKey           = userInfoContextKey("user-info")

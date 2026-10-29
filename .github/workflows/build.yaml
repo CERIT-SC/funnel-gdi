@@ -6,6 +6,10 @@ on:
       cache:
         type: boolean
         default: true
+      cover:
+        description: Build with coverage instrumentation (make build-cover); the artifact is then "funnel-cover"
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -20,7 +24,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: funnel
-        key: funnel-binary-${{ hashFiles('**/*.go', 'go.mod', 'go.sum') }}
+        key: funnel-binary-${{ inputs.cover && 'cover-' || '' }}${{ hashFiles('**/*.go', 'go.mod', 'go.sum') }}
 
     - name: Set up Go 1.x
       if: steps.binary-cache.outputs.cache-hit != 'true'
@@ -30,10 +34,10 @@ jobs:
 
     - name: Build Funnel
       if: steps.binary-cache.outputs.cache-hit != 'true'
-      run: make build
+      run: make ${{ inputs.cover && 'build-cover' || 'build' }}
 
     - name: Upload Funnel binary as artifact
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
-        name: funnel
+        name: ${{ inputs.cover && 'funnel-cover' || 'funnel' }}
         path: funnel

@@ -28,8 +28,12 @@ spec:
             - '--config'
             - /etc/config/funnel-server-config.yml
           image: {{ .Values.image }}
-          imagePullPolicy: Always
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           name: funnel
+{{- with .Values.funnel.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
           ports:
             - containerPort: 8000
               protocol: TCP

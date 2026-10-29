@@ -123,18 +123,14 @@ func loadTaskLogs(tx *bolt.Tx, task *tes.Task) {
 
 // GetTask gets a task, which describes a running task
 func (taskBolt *BoltDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, error) {
-	var task *tes.Task
-	var err error
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
 
+	var task *tes.Task
 	err = taskBolt.db.View(func(tx *bolt.Tx) error {
-		if req.View == "" {
-			req.View = tes.View_MINIMAL.String()
-		}
-		_, ok := tes.View_value[req.View]
-		if !ok {
-			return fmt.Errorf("Unknown view: %s", req.View)
-		}
-		task, err = getTaskView(tx, req.Id, tes.View(tes.View_value[req.View]), ctx)
+		task, err = getTaskView(tx, req.Id, view, ctx)
 		return err
 	})
 	return task, err
@@ -160,13 +156,12 @@ func getTaskView(tx *bolt.Tx, id string, view tes.View, ctx context.Context) (*t
 
 // ListTasks returns a list of taskIDs
 func (taskBolt *BoltDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
-	var tasks []*tes.Task
-	// If the tags filter request is non-nil we need the basic or full view
-	view := req.View
-	if req.View == tes.Minimal.String() && req.GetTags() != nil {
-		view = tes.View_BASIC.String()
+	viewMode, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
 	}
-	viewMode := tes.View(tes.View_value[view])
+
+	var tasks []*tes.Task
 	pageSize := tes.GetPageSize(req.GetPageSize())
 
 	taskBolt.db.View(func(tx *bolt.Tx) error {

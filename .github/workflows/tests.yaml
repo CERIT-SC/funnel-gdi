@@ -36,6 +36,9 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        # The TES OpenAPI document, for the util/openapi2proto test
+        submodules: true
 
     - name: Set up Go 1.x
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -49,8 +52,8 @@ jobs:
       id: unit_tests
       continue-on-error: true
       run: |
-        gotestsum --junitfile=test-report.xml -- ./... -coverprofile=coverage.out
-        go tool cover -func=coverage.out
+        mkdir -p build/coverage
+        gotestsum --junitfile=test-report.xml -- ./... -coverpkg=./... -coverprofile=build/coverage/unit.out
 
     - name: Test Report
       uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3
@@ -60,6 +63,140 @@ jobs:
         path: test-report.xml
         reporter: java-junit
 
+    - name: Coverage report
+      id: coverage_report
+      if: always() && hashFiles('build/coverage/unit.out') != ''
+      run: |
+        go run ./scripts/coverage -format markdown -title "Unit test coverage" \
+          -o build/coverage/merged.out build/coverage/unit.out | tee -a "$GITHUB_STEP_SUMMARY"
+        go tool cover -html=build/coverage/merged.out -o build/coverage/coverage.html
+
+    - name: Upload coverage
+      if: always() && steps.coverage_report.outcome == 'success'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: unit-coverage
+        path: |
+          build/coverage/unit.out
+          build/coverage/merged.out
+          build/coverage/coverage.html
+
     - name: Fail job if tests failed
       if: steps.unit_tests.outcome == 'failure'
       run: exit 1
+
+  # Component tests against real backends (make start-<backend> test-<backend>),
+  # with coverage of all packages. Backends that need cloud credentials
+  # (amazon-s3, gs, swift) or HPC schedulers are not run here.
+  backendTests:
+    name: backend (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - postgres
+          - mongodb
+          - elasticsearch
+          - badger
+          - dynamodb
+          - datastore
+          - kafka
+          - pubsub
+          - generic-s3
+          - ftp
+    steps:
+    - name: Check out code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      with:
+        go-version-file: go.mod
+
+    - name: Start backend
+      run: |
+        if grep -q "^start-${{ matrix.backend }}:" Makefile; then
+          make start-${{ matrix.backend }}
+          # The start targets only launch the containers; give them time to
+          # accept connections (Elasticsearch is the slowest).
+          sleep 30
+        fi
+
+    - name: Backend tests
+      run: |
+        mkdir -p build/coverage/backends
+        make test-${{ matrix.backend }} COVER_DIR=build/coverage/backends
+
+    - name: Upload coverage
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: coverage-backend-${{ matrix.backend }}
+        path: build/coverage/backends/*.out
+        if-no-files-found: ignore
+
+  # Merges the unit and backend coverage and enforces the minimum.
+  coverage:
+    needs: [unitTest, backendTests]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      # Minimum total statement coverage (percent) of the unit and component
+      # tests together, without generated code and tests/ helpers
+      # (scripts/coverage). May only be raised, never lowered.
+      COVERAGE_MIN: 75
+      BACKENDS: postgres mongodb elasticsearch badger dynamodb datastore kafka pubsub generic-s3 ftp
+    steps:
+    - name: Check out code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      with:
+        go-version-file: go.mod
+
+    - name: Download unit coverage
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      continue-on-error: true
+      with:
+        name: unit-coverage
+        path: build/coverage/unit
+
+    - name: Download backend coverage
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      continue-on-error: true
+      with:
+        pattern: coverage-backend-*
+        path: build/coverage/backends
+        merge-multiple: true
+
+    - name: Coverage report
+      id: coverage_report
+      run: |
+        profiles=$(ls build/coverage/unit/unit.out build/coverage/backends/*.out 2>/dev/null || true)
+        if [ -z "$profiles" ]; then
+          echo "No coverage profiles were produced." | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
+        {
+          [ -f build/coverage/unit/unit.out ] || echo "**Missing:** unit test coverage."
+          for b in $BACKENDS; do
+            ls build/coverage/backends/"$b"-*.out > /dev/null 2>&1 || echo "**Missing:** coverage of backend \`$b\` (its job failed or produced no profile)."
+          done
+          echo
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+        go run ./scripts/coverage -format markdown -title "Unit and component test coverage" \
+          -o build/coverage/merged.out $profiles | tee -a "$GITHUB_STEP_SUMMARY"
+        go tool cover -html=build/coverage/merged.out -o build/coverage/coverage.html
+
+    - name: Upload coverage
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: coverage
+        path: |
+          build/coverage/merged.out
+          build/coverage/coverage.html
+
+    - name: Coverage gate
+      run: go run ./scripts/coverage -min "$COVERAGE_MIN" build/coverage/merged.out > /dev/null

@@ -4,7 +4,8 @@ EventWriters:
   - log
 
 DynamoDB:
-  Endpoint: http://localhost:18000
-  Region: us-west-2
-  Key: "test"
-  Secret: "test"
+  AWSConfig:
+    Endpoint: http://localhost:18000
+    Region: us-west-2
+    Key: "test"
+    Secret: "test"

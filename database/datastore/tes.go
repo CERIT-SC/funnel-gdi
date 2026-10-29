@@ -1,6 +1,8 @@
 package datastore
 
 import (
+	"strings"
+
 	"cloud.google.com/go/datastore"
 	"github.com/ohsu-comp-bio/funnel/server"
 	"github.com/ohsu-comp-bio/funnel/tes"
@@ -10,10 +12,15 @@ import (
 
 // GetTask implements the TES GetTask interface.
 func (d *Datastore) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
+
 	key := taskKey(req.Id)
 	entity := &task{}
 
-	err := d.client.Get(ctx, key, entity)
+	err = d.client.Get(ctx, key, entity)
 	if err == datastore.ErrNoSuchEntity {
 		return nil, tes.ErrNotFound
 	}
@@ -26,10 +33,10 @@ func (d *Datastore) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.
 
 	task := entity.unmarshal()
 
-	switch req.View {
-	case tes.View_MINIMAL.String():
+	switch view {
+	case tes.View_MINIMAL:
 		task = task.GetMinimalView()
-	case tes.View_FULL.String():
+	case tes.View_FULL:
 		// Determine the keys needed to load the various parts of the full view.
 		parts := viewPartKeys(task)
 		err := d.getFullView(ctx, parts, map[string]*tes.Task{
@@ -72,6 +79,10 @@ func (d *Datastore) getFullView(ctx context.Context, keys []*datastore.Key, task
 
 // ListTasks implements the TES ListTasks interface.
 func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
 
 	page := req.PageToken
 	size := tes.GetPageSize(req.GetPageSize())
@@ -93,7 +104,14 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		q = q.FilterField("State", "=", int32(req.State))
 	}
 
+	// A tag key without a value matches any value of the tag; TagStrings
+	// only has key:value pairs, so such tags are checked below.
+	var tagKeys []string
 	for k, v := range req.GetTags() {
+		if v == "" {
+			tagKeys = append(tagKeys, k)
+			continue
+		}
 		q = q.FilterField("TagStrings", "=", encodeKV(k, v))
 	}
 
@@ -101,6 +119,9 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	var parts []*datastore.Key
 	byID := map[string]*tes.Task{}
 
+	// Name is not indexed, so the name prefix is filtered here; a page can
+	// have fewer tasks than its size.
+	read := 0
 	it := d.client.Run(ctx, q)
 	for {
 		t := &task{}
@@ -111,12 +132,19 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		if err != nil {
 			return nil, err
 		}
+		read++
+		if !strings.HasPrefix(t.Name, req.NamePrefix) {
+			continue
+		}
 		task := t.unmarshal()
+		if !hasTagKeys(task, tagKeys) {
+			continue
+		}
 
-		switch req.View {
-		case tes.View_MINIMAL.String():
+		switch view {
+		case tes.View_MINIMAL:
 			task = task.GetMinimalView()
-		case tes.View_FULL.String():
+		case tes.View_FULL:
 			// Determine the keys needed to load the various parts of the full view.
 			parts = append(parts, viewPartKeys(task)...)
 			byID[task.Id] = task
@@ -125,7 +153,7 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	}
 
 	// Load the full view parts
-	if req.View == tes.View_FULL.String() {
+	if view == tes.View_FULL {
 		err := d.getFullView(ctx, parts, byID)
 		if err != nil {
 			return nil, err
@@ -134,7 +162,7 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 
 	resp := &tes.ListTasksResponse{Tasks: tasks}
 
-	if len(tasks) == size {
+	if read == size {
 		c, err := it.Cursor()
 		if err != nil {
 			return nil, err
@@ -143,4 +171,13 @@ func (d *Datastore) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 	}
 
 	return resp, nil
+}
+
+func hasTagKeys(task *tes.Task, keys []string) bool {
+	for _, k := range keys {
+		if _, ok := task.Tags[k]; !ok {
+			return false
+		}
+	}
+	return true
 }

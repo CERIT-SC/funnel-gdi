@@ -16,14 +16,18 @@ import (
 func (db *DynamoDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Task, error) {
 	var task *tes.Task
 	var response *dynamodb.GetItemOutput
-	var err error
 
-	switch req.View {
-	case tes.View_MINIMAL.String():
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
+
+	switch view {
+	case tes.View_MINIMAL:
 		response, err = db.getMinimalView(ctx, req.Id)
-	case tes.View_BASIC.String():
+	case tes.View_BASIC:
 		response, err = db.getBasicView(ctx, req.Id)
-	case tes.View_FULL.String():
+	case tes.View_FULL:
 		response, err = db.getFullView(ctx, req.Id)
 	}
 	if err != nil {
@@ -46,6 +50,10 @@ func (db *DynamoDB) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.
 
 // ListTasks returns a list of taskIDs
 func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
+	view, err := tes.ParseView(req.View)
+	if err != nil {
+		return nil, err
+	}
 
 	filters := []expression.ConditionBuilder{}
 
@@ -58,27 +66,30 @@ func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		filters = append(filters, expression.Name("state").Equal(expression.Value(num)))
 	}
 
+	if req.NamePrefix != "" {
+		filters = append(filters, expression.Name("name").BeginsWith(req.NamePrefix))
+	}
+
+	// A tag key without a value matches any value of the tag.
 	for k, v := range req.GetTags() {
-		var fieldValue expression.ValueBuilder
 		if v == "" {
-			fieldValue = expression.Value(expression.Null)
+			filters = append(filters, expression.Name("tags."+k).AttributeExists())
 		} else {
-			fieldValue = expression.Value(v)
+			filters = append(filters, expression.Name("tags."+k).Equal(expression.Value(v)))
 		}
-		filters = append(filters, expression.Name("tags."+k).Equal(fieldValue))
 	}
 
 	exp := expression.NewBuilder().
 		WithKeyCondition(expression.Key(db.partitionKey).Equal(expression.Value(db.partitionValue)))
 
-	if req.View == tes.View_MINIMAL.String() {
+	if view == tes.View_MINIMAL {
 		exp = exp.WithProjection(expression.NamesList(expression.Name("id"), expression.Name("state")))
 	}
 
 	if len(filters) == 1 {
-		exp.WithFilter(filters[0])
+		exp = exp.WithFilter(filters[0])
 	} else if len(filters) > 1 {
-		exp.WithFilter(expression.And(filters[0], filters[1], filters[2:]...))
+		exp = exp.WithFilter(expression.And(filters[0], filters[1], filters[2:]...))
 	}
 
 	eb, err := exp.Build()
@@ -116,7 +127,7 @@ func (db *DynamoDB) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*
 		return nil, err
 	}
 
-	if req.View == tes.View_FULL.String() {
+	if view == tes.View_FULL {
 		for _, item := range response.Items {
 			// TODO handle errors
 			_ = db.getContent(ctx, item)

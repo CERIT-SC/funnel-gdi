@@ -14,7 +14,7 @@ import (
 
 // ReadQueue returns a slice of queued Tasks. Up to "n" tasks are returned.
 func (db *Postgres) ReadQueue(n int) []*tes.Task {
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(context.Background())
 	defer cancel()
 
 	// Select the full JSONB data field, ordering by creation_time (which is indexed)
@@ -59,7 +59,7 @@ func (db *Postgres) ReadQueue(n int) []*tes.Task {
 
 // PutNode is an RPC endpoint that is used by nodes to send heartbeats and status updates.
 func (db *Postgres) PutNode(ctx context.Context, node *scheduler.Node) (*scheduler.PutNodeResponse, error) {
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(ctx)
 	defer cancel()
 
 	// Try to get existing node
@@ -123,7 +123,7 @@ func (db *Postgres) insertNode(ctx context.Context, node *scheduler.Node) (*sche
 
 // GetNode gets a node
 func (db *Postgres) GetNode(ctx context.Context, req *scheduler.GetNodeRequest) (*scheduler.Node, error) {
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(ctx)
 	defer cancel()
 
 	selectSQL := `SELECT data FROM nodes WHERE id = $1`
@@ -147,7 +147,7 @@ func (db *Postgres) GetNode(ctx context.Context, req *scheduler.GetNodeRequest) 
 
 // DeleteNode deletes a node
 func (db *Postgres) DeleteNode(ctx context.Context, req *scheduler.Node) (*scheduler.DeleteNodeResponse, error) {
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(ctx)
 	defer cancel()
 
 	deleteSQL := `DELETE FROM nodes WHERE id = $1`
@@ -165,7 +165,7 @@ func (db *Postgres) DeleteNode(ctx context.Context, req *scheduler.Node) (*sched
 
 // ListNodes is an API endpoint that returns a list of nodes.
 func (db *Postgres) ListNodes(ctx context.Context, req *scheduler.ListNodesRequest) (*scheduler.ListNodesResponse, error) {
-	ctx, cancel := db.context()
+	ctx, cancel := db.context(ctx)
 	defer cancel()
 
 	selectSQL := `SELECT data FROM nodes`

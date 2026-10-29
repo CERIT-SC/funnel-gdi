@@ -1,0 +1,54 @@
+name: Bug report
+description: Funnel does not work as documented, or a task fails although it should not.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check [Troubleshooting for users](https://cerit-sc.github.io/funnel-gdi/latest/gdi/deployment/#troubleshooting-for-users) first.
+        **Do not paste passwords, tokens or signed URLs** — task inputs, outputs and logs may contain them. Report security problems through the [security policy](https://github.com/CERIT-SC/funnel-gdi/security/policy) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Funnel version
+      description: The `version` field of `GET /v1/service-info`, or the release / image tag.
+      placeholder: 0.12.2.1
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Kubernetes (Helm chart deploy-guide/kubernetes)
+        - Local binary
+        - Docker container
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: task
+    attributes:
+      label: Task ID and state
+      description: If a task is affected, its ID and state (e.g. `SYSTEM_ERROR`).
+      placeholder: d8q1f2... EXECUTOR_ERROR
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include the request you sent (curl command or task JSON) and the response.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant part of `GET /v1/tasks/<task-id>?view=FULL` (`system_logs`, executor `stderr`) or of the server log. Remove secrets first.
+      render: text
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Secrets
+      options:
+        - label: I removed passwords, tokens and signed URLs from everything above.
+          required: true

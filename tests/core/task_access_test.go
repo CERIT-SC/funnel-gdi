@@ -9,6 +9,7 @@ import (
 	"github.com/ohsu-comp-bio/funnel/server"
 	"github.com/ohsu-comp-bio/funnel/tes"
 	"github.com/ohsu-comp-bio/funnel/tests"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -210,7 +211,11 @@ func checkPermissionDenied(t *testing.T, err error) {
 		t.Fatal("expected grpc status error but received:", err)
 	}
 
-	expectedPrefix := tes.ErrNotPermitted.Error()
+	if s.Code() != codes.PermissionDenied {
+		t.Fatal("expected gRPC code PermissionDenied but got:", s.Code(), s.Message())
+	}
+
+	expectedPrefix := "FUNNEL-AUTH-008: " + tes.ErrNotPermitted.Error()
 
 	if !strings.HasPrefix(s.Message(), expectedPrefix) {
 		t.Fatal("expected error-prefix [", expectedPrefix, "] but got:", s.Message())

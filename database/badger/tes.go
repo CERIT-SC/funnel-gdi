@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	badger "github.com/dgraph-io/badger/v2"
 	"github.com/ohsu-comp-bio/funnel/server"
@@ -24,17 +25,14 @@ func (db *Badger) GetTask(ctx context.Context, req *tes.GetTaskRequest) (*tes.Ta
 		return nil, err
 	}
 
-	switch req.View {
-	case tes.View_MINIMAL.String():
-		task = task.GetMinimalView()
-	case tes.View_BASIC.String():
-		task = task.GetBasicView()
-	}
-	return task, nil
+	return task.GetView(req.View)
 }
 
 // ListTasks returns a list of tasks.
 func (db *Badger) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*tes.ListTasksResponse, error) {
+	if _, err := tes.ParseView(req.View); err != nil {
+		return nil, err
+	}
 	var tasks []*tes.Task
 	pageSize := tes.GetPageSize(req.GetPageSize())
 
@@ -93,7 +91,7 @@ func (db *Badger) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*te
 			// Filter tasks by tag.
 			for k, v := range req.GetTags() {
 				tval, ok := task.Tags[k]
-				if !ok || tval != v {
+				if !ok || (v != "" && tval != v) {
 					continue taskLoop
 				}
 			}
@@ -103,12 +101,11 @@ func (db *Badger) ListTasks(ctx context.Context, req *tes.ListTasksRequest) (*te
 				continue taskLoop
 			}
 
-			switch req.View {
-			case tes.View_MINIMAL.String():
-				task = task.GetMinimalView()
-			case tes.View_BASIC.String():
-				task = task.GetBasicView()
+			if !strings.HasPrefix(task.Name, req.NamePrefix) {
+				continue taskLoop
 			}
+
+			task, _ = task.GetView(req.View)
 
 			tasks = append(tasks, task)
 			i++

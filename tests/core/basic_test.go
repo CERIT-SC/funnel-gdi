@@ -1258,3 +1258,139 @@ func TestMetadataEvent(t *testing.T) {
 		}
 	}
 }
+
+// TES: no view is MINIMAL, an unknown view is an error, and ListTasks
+// filters by name prefix (with special characters taken literally).
+func TestViewDefaultAndNamePrefix(t *testing.T) {
+	tests.SetLogOutput(log, t)
+
+	f := tests.NewFunnel(tests.DefaultConfig())
+	f.StartServer()
+	ctx := context.Background()
+
+	var ids []string
+	for _, name := range []string{"prefix-a", "prefix-b", "other", "pre.fix"} {
+		id, err := f.RunTask(&tes.Task{
+			Name:      name,
+			Executors: []*tes.Executor{{Image: "alpine", Command: []string{"echo", name}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		f.Wait(id)
+	}
+
+	task, err := f.RPC.GetTask(ctx, &tes.GetTaskRequest{Id: ids[0]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Id != ids[0] || task.State != tes.State_COMPLETE || task.Name != "" || task.Executors != nil {
+		t.Errorf("GetTask without a view is not MINIMAL: %v", task)
+	}
+	if _, err := f.RPC.GetTask(ctx, &tes.GetTaskRequest{Id: ids[0], View: "BOGUS"}); err == nil {
+		t.Error("GetTask with an unknown view must fail")
+	}
+	if _, err := f.RPC.ListTasks(ctx, &tes.ListTasksRequest{View: "BOGUS"}); err == nil {
+		t.Error("ListTasks with an unknown view must fail")
+	}
+
+	r, err := f.RPC.ListTasks(ctx, &tes.ListTasksRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Tasks) != 4 || r.Tasks[0].Name != "" || r.Tasks[0].Executors != nil {
+		t.Errorf("ListTasks without a view is not MINIMAL: %v", r.Tasks)
+	}
+
+	for prefix, want := range map[string][]string{
+		"prefix-": {"prefix-b", "prefix-a"},
+		"pre.":    {"pre.fix"},
+		"pre":     {"pre.fix", "prefix-b", "prefix-a"},
+		"nothing": nil,
+	} {
+		r, err := f.RPC.ListTasks(ctx, &tes.ListTasksRequest{View: tes.View_BASIC.String(), NamePrefix: prefix})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, task := range r.Tasks {
+			got = append(got, task.Name)
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("name prefix %q: %v, want %v", prefix, got, want)
+		}
+	}
+}
+
+// TES 1.1: a tag key without a value matches any value of that tag.
+func TestListTaskFilterTagKey(t *testing.T) {
+	tests.SetLogOutput(log, t)
+
+	f := tests.NewFunnel(tests.DefaultConfig())
+	f.StartServer()
+	ctx := context.Background()
+
+	for _, tags := range []map[string]string{
+		{"a": "1", "b": "2"},
+		{"a": "3"},
+		{"c": ""},
+	} {
+		id, err := f.RunTask(&tes.Task{
+			Tags:      tags,
+			Executors: []*tes.Executor{{Image: "alpine", Command: []string{"echo"}}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Wait(id)
+	}
+
+	for _, tc := range []struct {
+		keys, values []string
+		want         int
+	}{
+		{[]string{"a"}, nil, 2},
+		{[]string{"a", "b"}, []string{"1"}, 1},
+		{[]string{"b", "a"}, []string{"2"}, 1},
+		{[]string{"c"}, nil, 1},
+		{[]string{"a", "x"}, []string{"1"}, 0},
+		{[]string{"a"}, []string{"9"}, 0},
+	} {
+		r, err := f.HTTP.ListTasks(ctx, &tes.ListTasksRequest{View: tes.View_BASIC.String(), TagKey: tc.keys, TagValue: tc.values})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Tasks) != tc.want {
+			t.Errorf("tag_key %v tag_value %v: %d tasks, want %d", tc.keys, tc.values, len(r.Tasks), tc.want)
+		}
+	}
+}
+
+// ignore_error is stored with the task: the worker reads the task from the
+// database and runs the next executor after a failed one.
+func TestIgnoreErrorStored(t *testing.T) {
+	tests.SetLogOutput(log, t)
+
+	f := tests.NewFunnel(tests.DefaultConfig())
+	f.StartServer()
+
+	id, err := f.RunTask(&tes.Task{
+		Executors: []*tes.Executor{
+			{Image: "alpine", Command: []string{"sh", "-c", "exit 1"}, IgnoreError: true},
+			{Image: "alpine", Command: []string{"echo", "second"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := f.Wait(id)
+	if !task.Executors[0].IgnoreError {
+		t.Error("ignore_error was not stored")
+	}
+	if logs := task.Logs[0].Logs; len(logs) != 2 || logs[1].Stdout != "second\n" {
+		t.Errorf("the second executor did not run: %v", logs)
+	}
+}

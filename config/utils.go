@@ -9,7 +9,28 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/goccy/go-yaml"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
+
+// Merge merges src (e.g. a parsed config file) into dst like proto.Merge,
+// except that a list set in src replaces the list in dst instead of being
+// appended to it (e.g. MongoDB.Addrs from a config file replaces the default
+// address).
+func Merge(dst, src *Config) {
+	mergeReplacingLists(dst.ProtoReflect(), proto.Clone(src).ProtoReflect())
+}
+
+func mergeReplacingLists(dst, src protoreflect.Message) {
+	src.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		if fd.Message() != nil && !fd.IsList() && !fd.IsMap() && dst.Has(fd) {
+			mergeReplacingLists(dst.Mutable(fd).Message(), v.Message())
+		} else {
+			dst.Set(fd, v)
+		}
+		return true
+	})
+}
 
 // ToYaml formats the configuration into YAML and returns the bytes.
 func ToYaml(c *Config) ([]byte, error) {

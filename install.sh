@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Installs a release of UPSTREAM Funnel (calypr/funnel), not funnel-gdi:
+# funnel-gdi releases publish container images only. To run funnel-gdi,
+# build it from source (make build) or use ghcr.io/cerit-sc/funnel-gdi —
+# see DEPLOYMENT.md.
+
 # Debugging output
 # set -x
 

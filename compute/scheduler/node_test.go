@@ -75,6 +75,35 @@ func TestNodeTimeout(t *testing.T) {
 	n.Wait()
 }
 
+// The default "Timeout: disabled: true" has no duration: the node must not
+// time out (a duration of 0 would stop it after its first task).
+func TestNodeTimeoutDisabled(t *testing.T) {
+	for name, tc := range map[string]*config.TimeoutConfig{
+		"default":  config.DefaultConfig().Node.Timeout,
+		"disabled": {TimeoutOption: &config.TimeoutConfig_Disabled{Disabled: true}},
+		"unset":    nil,
+	} {
+		timeout := idleTimeout(&config.Node{Timeout: tc})
+		timeout.Start()
+		select {
+		case <-timeout.Done():
+			t.Errorf("%s: the node timed out", name)
+		case <-time.After(20 * time.Millisecond):
+		}
+		timeout.Stop()
+	}
+
+	timeout := idleTimeout(&config.Node{Timeout: &config.TimeoutConfig{
+		TimeoutOption: &config.TimeoutConfig_Duration{Duration: durationpb.New(0)},
+	}})
+	timeout.Start()
+	select {
+	case <-timeout.Done():
+	case <-time.After(time.Second):
+		t.Error("a duration of 0 did not time out")
+	}
+}
+
 // Test that a node does nothing where there are no assigned tasks.
 func TestNoTasks(t *testing.T) {
 	conf := config.DefaultConfig()

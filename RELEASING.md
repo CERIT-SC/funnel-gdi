@@ -34,7 +34,7 @@ A version is released only when all of these hold:
 
 | Criterion | Checked by |
 |---|---|
-| CI is green on `master`: unit tests, TES compliance, Nextflow, documentation site build and links | GitHub Actions |
+| CI is green on `master`: unit and component tests including their coverage gate (`COVERAGE_MIN` in `.github/workflows/tests.yaml`, at least 75%), acceptance tests (TES compliance) including their coverage gate (`ACCEPTANCE_COVERAGE_MIN` in `.github/workflows/acceptance.yaml`, at least 50%), Nextflow, documentation site build and links | GitHub Actions |
 | `README.md` and `DEPLOYMENT.md` name the version, the Helm chart's `appVersion` matches | `scripts/check-docs-version.sh`, run again by the `Git Tag` workflow, which stops the release otherwise |
 | The documentation has been reviewed against the changes | [Checklist](#release-checklist), step 3 |
 | The platforms listed as "Tested" in `DEPLOYMENT.md` have been re-tested for this version | [Checklist](#release-checklist), step 4 |
@@ -98,9 +98,9 @@ release notes.
      run the commands in "Testing the server", uninstall. Record
      `kubectl version` (server) and `helm version`.
    - Web dashboard: start a server (Option 1), submit the hello-world task
-     from "Testing the server" and run
-     `node scripts/dashboard-smoke-test.mjs http://localhost:8000 <task-id> build/dashboard-test`
-     (setup in the script header). Record the browser version it prints.
+     from "Testing the server", open `http://localhost:8000` in the browser
+     and check that the task list and the task's page show it. Record the
+     browser version.
      If the dashboard bundle changed, check its minimum Chrome version with
      `npx es-check` on `/static/js/main.*.js`.
 5. **Check.** `scripts/check-docs-version.sh X.Y.Z.N` must pass.

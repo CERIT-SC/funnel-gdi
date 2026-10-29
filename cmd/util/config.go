@@ -6,7 +6,6 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/ohsu-comp-bio/funnel/config"
-	"google.golang.org/protobuf/proto"
 )
 
 // MergeConfigFileWithFlags is a util used by server commands that use flags to set
@@ -24,15 +23,9 @@ func MergeConfigFileWithFlags(file string, flagConf *config.Config) (*config.Con
 			return conf, err
 		}
 
-		// Use proto.Merge to properly merge nested fields
-		proto.Merge(conf, fileConf)
-
-		// Repeated fields are appended by proto.Merge. ForbiddenPathPrefixes is
-		// an authoritative configuration list, so a non-empty value from the
-		// config file must replace the Kubernetes runtime defaults instead.
-		if fileConf.Kubernetes != nil && len(fileConf.Kubernetes.ForbiddenPathPrefixes) > 0 {
-			conf.Kubernetes.ForbiddenPathPrefixes = append([]string(nil), fileConf.Kubernetes.ForbiddenPathPrefixes...)
-		}
+		// Merge nested fields; a list from the file replaces the default list
+		// (e.g. MongoDB.Addrs, EventWriters, Kubernetes.ForbiddenPathPrefixes).
+		config.Merge(conf, fileConf)
 	}
 
 	// Merge defaults into file config (file values take priority, including false values)

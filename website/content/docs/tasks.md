@@ -8,6 +8,8 @@ menu:
 
 # Tasks
 
+> If a task fails or seems stuck, see [Troubleshooting for users](/gdi/deployment/#troubleshooting-for-users): what each state means and how to read a task's logs.
+
 A task defines a unit of work:
 
 - metadata

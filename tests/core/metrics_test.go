@@ -11,6 +11,7 @@ import (
 	"github.com/ohsu-comp-bio/funnel/tes"
 	"github.com/ohsu-comp-bio/funnel/tests"
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 )
 
 func TestMetrics(t *testing.T) {
@@ -59,7 +60,7 @@ func TestMetrics(t *testing.T) {
 	}
 	defer hresp.Body.Close()
 
-	parser := expfmt.TextParser{}
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	met, err := parser.TextToMetricFamilies(hresp.Body)
 	if err != nil {
 		t.Fatal(err)

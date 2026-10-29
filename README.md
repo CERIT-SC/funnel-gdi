@@ -7,8 +7,8 @@
 [tests-badge]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/tests.yaml/badge.svg?branch=master
 [tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/tests.yaml
 
-[compliance-tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/compliance.yaml
-[compliance-tests-badge]: https://img.shields.io/github/actions/workflow/status/CERIT-SC/funnel-gdi/compliance.yaml?branch=master&label=TES%20Compliance
+[compliance-tests]: https://github.com/CERIT-SC/funnel-gdi/actions/workflows/acceptance.yaml
+[compliance-tests-badge]: https://img.shields.io/github/actions/workflow/status/CERIT-SC/funnel-gdi/acceptance.yaml?branch=master&label=Acceptance%20tests
 
 [license-badge]: https://img.shields.io/badge/License-MIT-yellow.svg
 [license]: https://opensource.org/licenses/MIT
@@ -51,7 +51,7 @@ Per-task storage modes on Kubernetes (`shared` / `pvc` / `full`) with a Helm cha
 
 | Document | Contents |
 |---|---|
-| [DEPLOYMENT.md](DEPLOYMENT.md) | How to deploy (local binary, Kubernetes, Docker), system requirements, supported and tested platforms, upgrade and rollback, production checklist |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | How to deploy (local binary, Kubernetes, Docker), system requirements, supported and tested platforms, upgrade and rollback, production checklist, troubleshooting for operators and for users, getting help |
 | [Releases](https://github.com/CERIT-SC/funnel-gdi/releases) | Changes per GDI version (release notes), with links to the docs of each release |
 | [GDI-FEATURES.md](GDI-FEATURES.md) | What the fork adds on top of upstream and how to keep it in sync |
 | [RELEASING.md](RELEASING.md) | Release policy (versioning, when releases are made, support, compatibility) and the release checklist |

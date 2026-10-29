@@ -1,0 +1,55 @@
+name: Acceptance Scenarios
+
+# Called by acceptance.yaml, which builds the coverage-instrumented binary
+# (artifact "funnel-cover") and merges the coverage of all acceptance tests.
+# Runs tests/acceptance/scenarios.sh: the CLI, the terminal dashboard,
+# scheduler mode with a node, and the Slurm backend with fake commands.
+on:
+  workflow_call:
+
+jobs:
+  scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: Download Funnel
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      with:
+        name: funnel-cover
+
+    - name: Check out code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        path: src
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      with:
+        go-version-file: src/go.mod
+        cache: false
+
+    - name: Start S3 and FTP servers
+      run: make -C src start-s3 start-ftp
+
+    - name: Run scenarios
+      run: |
+        chmod +x ./funnel
+        src/tests/acceptance/scenarios.sh ./funnel covdata
+
+    - name: Coverage profile
+      if: always()
+      run: |
+        mkdir -p coverage
+        if ! ls covdata/covcounters.* > /dev/null 2>&1; then
+          echo "::warning::No coverage data: Funnel did not exit normally (killed or crashed)."
+          exit 0
+        fi
+        go tool covdata textfmt -i=covdata -o=coverage/scenarios.out
+
+    - name: Upload coverage
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: coverage-acceptance-scenarios
+        path: coverage/*.out
+        if-no-files-found: ignore

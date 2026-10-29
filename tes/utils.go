@@ -99,7 +99,7 @@ func InitTaskWithForbiddenPathPrefixes(task *Task, overwrite bool, forbiddenPath
 		task.CreationTime = time.Now().Format(time.RFC3339Nano)
 	}
 	if err := ValidateWithForbiddenPathPrefixes(task, forbiddenPathPrefixes); err != nil {
-		return fmt.Errorf("invalid task message:\n%s", err)
+		return fmt.Errorf("invalid task message:\n%w", err)
 	}
 	return nil
 }
@@ -113,6 +113,34 @@ func RunnableState(s State) bool {
 func TerminalState(s State) bool {
 	return s == State_COMPLETE || s == State_EXECUTOR_ERROR || s == State_SYSTEM_ERROR ||
 		s == State_CANCELED
+}
+
+// ParseView returns the view requested in GetTask or ListTasks. No view is
+// the TES default, MINIMAL.
+func ParseView(view string) (View, error) {
+	if view == "" {
+		return View_MINIMAL, nil
+	}
+	v, ok := View_value[view]
+	if !ok {
+		return View_MINIMAL, fmt.Errorf("unknown view: %s", view)
+	}
+	return View(v), nil
+}
+
+// GetView returns the view of a task requested in GetTask or ListTasks.
+func (task *Task) GetView(view string) (*Task, error) {
+	v, err := ParseView(view)
+	switch {
+	case err != nil:
+		return nil, err
+	case v == View_MINIMAL:
+		return task.GetMinimalView(), nil
+	case v == View_BASIC:
+		return task.GetBasicView(), nil
+	default:
+		return task, nil
+	}
 }
 
 // GetBasicView returns the basic view of a task.

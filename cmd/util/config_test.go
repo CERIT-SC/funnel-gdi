@@ -1,6 +1,8 @@
 package util
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -74,5 +76,30 @@ func TestMergeConfigFileReplacesForbiddenPathPrefixes(t *testing.T) {
 
 	if got, want := result.Kubernetes.ForbiddenPathPrefixes, []string{"/secret"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected configured deny list %v, got %v", want, got)
+	}
+}
+
+// Lists from the config file replace the default lists instead of being
+// appended to them; other fields keep their defaults.
+func TestMergeConfigFileReplacesLists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "funnel.yml")
+	err := os.WriteFile(path, []byte("EventWriters:\n  - log\n  - kafka\nMongoDB:\n  Addrs:\n    - localhost:27000\n"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := MergeConfigFileWithFlags(path, config.EmptyConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := result.MongoDB.Addrs, []string{"localhost:27000"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("MongoDB.Addrs %v, want %v", got, want)
+	}
+	if got, want := result.EventWriters, []string{"log", "kafka"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("EventWriters %v, want %v", got, want)
+	}
+	def := config.DefaultConfig()
+	if result.MongoDB.Database != def.MongoDB.Database || !reflect.DeepEqual(result.Kubernetes.ForbiddenPathPrefixes, def.Kubernetes.ForbiddenPathPrefixes) {
+		t.Errorf("defaults lost: %q %v", result.MongoDB.Database, result.Kubernetes.ForbiddenPathPrefixes)
 	}
 }

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,11 +38,30 @@ func DefaultConfig() *config.Config {
 	conf.Swift.Disabled = true
 	conf.FTPStorage.Disabled = true
 
-	// Get config from test command line flag, if present.
+	// Get config from test command line flag, if present. Parsing resets the
+	// message it parses into, so parse into an empty config and merge it
+	// into the defaults.
 	if configFile != "" {
-		err := config.ParseFile(configFile, conf)
+		fileConf := config.EmptyConfig()
+		err := config.ParseFile(configFile, fileConf)
 		if err != nil {
 			panic(err)
+		}
+		config.Merge(conf, fileConf)
+
+		// "Disabled: false" is a zero value, which merging cannot tell from
+		// unset: a storage section in the file decides itself.
+		if fileConf.AmazonS3 != nil {
+			conf.AmazonS3.Disabled = fileConf.AmazonS3.Disabled
+		}
+		if fileConf.GoogleStorage != nil {
+			conf.GoogleStorage.Disabled = fileConf.GoogleStorage.Disabled
+		}
+		if fileConf.Swift != nil {
+			conf.Swift.Disabled = fileConf.Swift.Disabled
+		}
+		if fileConf.FTPStorage != nil {
+			conf.FTPStorage.Disabled = fileConf.FTPStorage.Disabled
 		}
 	}
 
@@ -63,6 +84,8 @@ func TestifyConfig(conf *config.Config) *config.Config {
 	conf.MongoDB.Database = prefix
 	conf.DynamoDB.TableBasename = prefix
 	conf.Datastore.Project = prefix
+	// Unquoted Postgres identifiers: no '-'.
+	conf.Postgres.Database = strings.ReplaceAll(prefix, "-", "_")
 
 	reconcile := durationpb.New(time.Second * 5)
 	conf.HTCondor.ReconcileRate = reconcile
@@ -81,12 +104,16 @@ func TestifyConfig(conf *config.Config) *config.Config {
 	return conf
 }
 
-// RandomPort returns a random port string between 10000 and 20000.
+// RandomPort returns a free port.
 func RandomPort() string {
-	min := 10000
-	max := 40000
-	n := rand.Intn(max-min) + min
-	return fmt.Sprintf("%d", n)
+	// Let the kernel pick a free port: a random number could be in use, e.g.
+	// by an outgoing connection to the test database.
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+	return fmt.Sprintf("%d", l.Addr().(*net.TCPAddr).Port)
 }
 
 // RandomPortConfig returns a modified config with random HTTP and RPC ports.

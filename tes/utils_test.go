@@ -44,3 +44,34 @@ func TestBase64Encode(t *testing.T) {
 		t.Fatal("incorrect decoded task from Base64Decode")
 	}
 }
+
+func TestGetView(t *testing.T) {
+	task := &Task{
+		Id:     "task1",
+		Name:   "name",
+		State:  State_RUNNING,
+		Inputs: []*Input{{Path: "/data/in", Content: "secret"}},
+	}
+	// The name, and the input content, are in the view.
+	for view, want := range map[string][2]bool{
+		"":        {false, false},
+		"MINIMAL": {false, false},
+		"BASIC":   {true, false},
+		"FULL":    {true, true},
+	} {
+		got, err := task.GetView(view)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hasContent := len(got.Inputs) == 1 && got.Inputs[0].Content == "secret"
+		if got.Id != "task1" || got.State != State_RUNNING || (got.Name == "name") != want[0] || hasContent != want[1] {
+			t.Errorf("view %q: %v", view, got)
+		}
+	}
+	if _, err := task.GetView("BOGUS"); err == nil {
+		t.Error("an unknown view must fail")
+	}
+	if task.Inputs[0].Content != "secret" {
+		t.Error("the task must not be changed")
+	}
+}
